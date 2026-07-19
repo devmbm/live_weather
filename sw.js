@@ -3,7 +3,7 @@
    - CARTO tiles: cache-first with a size cap (repeat visits in the same area cost no tile traffic)
    - GeoSphere API + geocoder: never cached (weather must be fresh) */
 
-var SHELL_CACHE = "rw-shell-v8";
+var SHELL_CACHE = "rw-shell-v9";
 var TILE_CACHE = "rw-tiles-v1";
 var TILE_LIMIT = 120;
 
