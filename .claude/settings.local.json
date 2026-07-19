@@ -32,7 +32,8 @@
       "PowerShell(Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\" | Where-Object { $_.CommandLine -match \"serve\\\\.ps1\" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -Confirm:$false; \"stopped $\\($_.ProcessId\\)\" })",
       "Bash(grep -aoE 'seconds since [0-9T: +-]{8,30}|minutes since [0-9T: +-]{8,30}|hours since [0-9T: +-]{8,30}' /tmp/grid.nc | head -5)",
       "Bash(D=\"/c/Users/WDAGUtilityAccount/AppData/Local/Temp/claude/c--Users-WDAGUtilityAccount-Desktop-live-weather/06749fb4-b838-4c62-94b7-75d2e11d0f0c/scratchpad/dom6.html\" *)",
-      "Bash(curl -s -o /tmp/grid2.nc \"https://dataset.api.hub.geosphere.at/v1/grid/forecast/nowcast-v1-15min-1km?parameters=rr&output_format=netcdf&bbox=48.12,16.05,48.48,16.60\")"
+      "Bash(curl -s -o /tmp/grid2.nc \"https://dataset.api.hub.geosphere.at/v1/grid/forecast/nowcast-v1-15min-1km?parameters=rr&output_format=netcdf&bbox=48.12,16.05,48.48,16.60\")",
+      "PowerShell($p = Get-CimInstance Win32_Process -Filter \"Name='powershell.exe'\" | Where-Object { $_.CommandLine -match \"serve\\\\.ps1\" }; if \\($p\\) { $p | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -Confirm:$false }; \"stopped\" } else { \"already stopped\" })"
     ]
   }
 }
