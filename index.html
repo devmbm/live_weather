@@ -205,17 +205,24 @@
 
   .bars {
     position: relative;
-    height: clamp(40px, 7.5vh, 64px);
+    height: clamp(72px, 12vh, 130px);
     display: flex;
     align-items: flex-end;
     gap: 2px;
     border-bottom: 1px solid var(--baseline);
     margin-top: 14px;
   }
-  .app.nomap .bars { height: clamp(56px, 12vh, 110px); }
+  .app.nomap .bars { height: clamp(88px, 15vh, 160px); }
   .bars .gl {
     position: absolute; left: 0; right: 0; height: 1px;
     background: var(--grid);
+  }
+  .bars .gl-label {
+    position: absolute; right: 2px;
+    font-size: 9.5px; line-height: 1;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
   }
   .bar {
     flex: 1;
@@ -570,19 +577,33 @@
     if (opts.floor !== undefined) hi = Math.max(hi, opts.floor);
     if (!opts.baselined) hi += 0.5;
     if (hi <= lo) hi = lo + 1;
-    [0.33, 0.66].forEach(function (f) {
+    /* gridlines at "nice" values, labelled so the scale is readable */
+    var range = hi - lo;
+    var raw = range / 3;
+    var pow = Math.pow(10, Math.floor(Math.log(raw) / Math.LN10));
+    var nn = raw / pow;
+    var step = (nn < 1.5 ? 1 : nn < 3.5 ? 2 : nn < 7.5 ? 5 : 10) * pow;
+    for (var k = Math.ceil(lo / step); k * step <= hi + 1e-9; k++) {
+      var gv = k * step;
+      var p = (gv - lo) / range * 100;
+      if (p < 5) continue;
       var gl = document.createElement("div");
       gl.className = "gl";
-      gl.style.bottom = (f * 100) + "%";
+      gl.style.bottom = p + "%";
       el.appendChild(gl);
-    });
+      var tl = document.createElement("span");
+      tl.className = "gl-label";
+      tl.textContent = step < 1 ? gv.toFixed(1) : Math.round(gv);
+      tl.style.bottom = "calc(" + p + "% + 2px)";
+      el.appendChild(tl);
+    }
     var maxV = Math.max.apply(null, finite);
     var minV = Math.min.apply(null, finite);
     values.forEach(function (v, i) {
       var b = document.createElement("div");
       var isZero = !fin(v) || (opts.baselined && v <= 0);
       b.className = "bar" + (i < pastN ? " past" : "") + (isZero ? " zero" : "");
-      if (!isZero) b.style.height = Math.max(6, (v - lo) / (hi - lo) * 88) + "%";
+      if (!isZero) b.style.height = Math.max(5, (v - lo) / range * 100) + "%";
       var wantLabel = fin(v) && (
         (opts.labelMax && v === maxV && (!opts.baselined || v > 0)) ||
         (opts.labelMin && v === minV));
@@ -613,7 +634,8 @@
     clearEl(el);
     times.forEach(function (t, i) {
       var isNow = i === pastN;
-      if (isNow || (t.getMinutes() === 0 && i > 0 && i < times.length - 1)) {
+      /* hour labels sitting right beside "now" would overlap it */
+      if (isNow || (t.getMinutes() === 0 && Math.abs(i - pastN) > 1 && i > 0 && i < times.length - 1)) {
         var s = document.createElement("span");
         s.style.left = ((i + 0.5) / times.length * 100) + "%";
         s.textContent = isNow ? "now" : hhmm(t);
