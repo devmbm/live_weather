@@ -88,7 +88,7 @@
   .app {
     width: 100%;
     max-width: 430px;
-    height: 100dvh;
+    min-height: 100dvh;
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -269,11 +269,8 @@
   .radar-card { flex: 1 1 auto; padding-bottom: 8px; }
   .app.nomap .radar-card { display: none; }
   .radar-outer {
-    flex: 1;
-    min-height: 150px;
     display: flex;
     justify-content: center;
-    align-items: center;
   }
   .radar-frame {
     position: relative;
@@ -780,9 +777,9 @@
   }
 
   function radarGeometry(lat, lon) {
-    /* 1:1 panel: square side = smaller of the space the card offers */
+    /* 1:1 panel at full column width — the page scrolls if it overflows */
     var outer = radar.frame.parentElement;
-    var side = Math.floor(Math.min(outer.clientWidth, Math.max(outer.clientHeight, 140)));
+    var side = Math.floor(outer.clientWidth);
     if (!side) return null;
     radar.frame.style.width = side + "px";
     radar.frame.style.height = side + "px";
