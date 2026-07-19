@@ -470,6 +470,21 @@
       <div class="ticks" id="ticks" role="group" aria-label="Radar time step"></div>
       <button class="ctl" id="rangeBtn" type="button" aria-pressed="false" aria-label="Extend loop to 3 hours">3 h</button>
       <button class="ctl" id="mapBtn" type="button" aria-pressed="true" aria-label="Hide base map">Map</button>
+      <button class="ctl" id="fltBtn" type="button" aria-pressed="false" aria-label="Show live flights">✈</button>
+    </div>
+  </section>
+
+  <section class="card" id="flightsCard" aria-label="Live flights, 100 kilometres across" hidden>
+    <h2>Flights · 100 × 100 km <span class="note">refresh 15 s</span></h2>
+    <div class="radar-outer">
+    <div class="radar-frame" id="flightsFrame">
+      <canvas id="fbase" aria-hidden="true"></canvas>
+      <canvas id="flabels" aria-hidden="true"></canvas>
+      <canvas id="fplanes" aria-label="Aircraft around your location"></canvas>
+      <div class="me" title="You are here"></div>
+      <div class="scalebar" id="fscale"><b></b>25 km</div>
+      <div class="maphint">© OSM © CARTO · airplanes.live</div>
+    </div>
     </div>
   </section>
 
@@ -518,6 +533,7 @@
     applyTheme(next);
     drawRadarFrame();
     if (radar.mapped && radar.geo) drawMaps();
+    flightsRedraw();
   });
 
   /* ================= clock ================= */
@@ -1041,6 +1057,7 @@
     }
     drawRadarFrame();
     if (radar.mapped) drawMaps();
+    flightsRedraw();
   }
   addEventListener("resize", function () {
     clearTimeout(redrawTimer);
@@ -1049,7 +1066,222 @@
   matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () {
     drawRadarFrame();
     if (radar.mapped) drawMaps();
+    flightsRedraw();
   });
+
+  /* ================= flights (opt-in: zero requests until the ✈ button) ================= */
+  var flights = { on: false, timer: null, geo: null, hist: {}, planes: [] };
+  var FLT_REFRESH = 15000;
+  var AIRLINES = {
+    AUA: "Austrian", DLH: "Lufthansa", RYR: "Ryanair", WZZ: "Wizz Air", WMT: "Wizz Air",
+    EZY: "easyJet", EJU: "easyJet", BAW: "British Airways", AFR: "Air France", KLM: "KLM",
+    SWR: "Swiss", EWG: "Eurowings", VLG: "Vueling", THY: "Turkish", PGT: "Pegasus",
+    UAE: "Emirates", QTR: "Qatar", ETD: "Etihad", LOT: "LOT", CSA: "Czech", TAP: "TAP",
+    IBE: "Iberia", SAS: "SAS", FIN: "Finnair", AEE: "Aegean", ELY: "El Al", BEL: "Brussels",
+    ITY: "ITA", EIN: "Aer Lingus", TVS: "Smartwings", NJE: "NetJets", AEA: "Air Europa",
+    NSZ: "Norse", TRA: "Transavia", CFG: "Condor", AHY: "AZAL", ROT: "TAROM", LZB: "Bulgaria Air"
+  };
+  function airlineOf(cs) {
+    var m = /^([A-Z]{3})\d/.exec(cs);
+    if (m) return AIRLINES[m[1]] || null;
+    return cs ? "private" : null;
+  }
+  function cssTok(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+
+  function flightsGeometry() {
+    var frame = $("flightsFrame");
+    var outer = frame.parentElement;
+    var side = Math.floor(outer.clientWidth);
+    if (!side || !radar.pos) return null;
+    frame.style.width = side + "px";
+    frame.style.height = side + "px";
+    var lat = radar.pos.lat, lon = radar.pos.lon;
+    var dpr = Math.min(2, window.devicePixelRatio || 1);
+    var mpp = 100000 / side;                              /* 100 km across */
+    var latRes = 156543.03392 * Math.cos(lat * Math.PI / 180);
+    var z = Math.max(6, Math.min(10, Math.round(Math.log2(latRes / mpp))));
+    var tileMpp = latRes / Math.pow(2, z);
+    var s = tileMpp / mpp;
+    ["fbase", "flabels", "fplanes"].forEach(function (id) {
+      var c = $(id);
+      c.width = Math.round(side * dpr);
+      c.height = Math.round(side * dpr);
+    });
+    $("fscale").querySelector("b").style.width = (side / 4) + "px";
+    var cx = lon2gx(lon, z), cy = lat2gy(lat, z);
+    return { W: side, H: side, dpr: dpr, z: z, s: s, tileMpp: tileMpp,
+      originX: cx - (side / 2) / s, originY: cy - (side / 2) / s };
+  }
+  function fx(lon) { var g = flights.geo; return (lon2gx(lon, g.z) - g.originX) * g.s; }
+  function fy(lat) { var g = flights.geo; return (lat2gy(lat, g.z) - g.originY) * g.s; }
+
+  function drawFTiles(canvas, kind) {
+    var g = flights.geo;
+    if (!g || !flights.on) return;
+    var ctx = canvas.getContext("2d");
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    var style = tileStyle(kind);
+    var suffix = g.dpr > 1 ? "@2x" : "";
+    var x0 = Math.floor(g.originX / 256), x1 = Math.floor((g.originX + g.W / g.s) / 256);
+    var y0 = Math.floor(g.originY / 256), y1 = Math.floor((g.originY + g.H / g.s) / 256);
+    var max = Math.pow(2, g.z) - 1;
+    for (var tx = x0; tx <= x1; tx++) {
+      for (var ty = Math.max(0, y0); ty <= Math.min(max, y1); ty++) {
+        (function (tx, ty) {
+          var img = new Image();
+          img.crossOrigin = "anonymous";
+          img.onload = function () {
+            if (flights.geo !== g || !flights.on) return;
+            var k = g.dpr * g.s;
+            ctx.setTransform(k, 0, 0, k, -g.originX * k, -g.originY * k);
+            ctx.drawImage(img, tx * 256, ty * 256, 256, 256);
+          };
+          var wx = ((tx % (max + 1)) + max + 1) % (max + 1);
+          img.src = TILE_HOST + style + "/" + g.z + "/" + wx + "/" + ty + suffix + ".png";
+        })(tx, ty);
+      }
+    }
+  }
+  function drawFTilesAll() { drawFTiles($("fbase"), "base"); drawFTiles($("flabels"), "labels"); }
+
+  function planeGlyph(c, x, y, trk, s, color) {
+    c.save();
+    c.translate(x, y);
+    c.rotate(trk * Math.PI / 180);
+    c.scale(s, s);
+    c.fillStyle = color;
+    c.beginPath();
+    c.moveTo(0, -7);
+    c.bezierCurveTo(1.2, -5, 1.2, -3.5, 1.2, -2);
+    c.lineTo(7, 1.6); c.lineTo(7, 3.4); c.lineTo(1.2, 1.8);
+    c.lineTo(0.9, 4.6); c.lineTo(2.8, 6.2); c.lineTo(2.8, 7.4);
+    c.lineTo(0, 6.6); c.lineTo(-2.8, 7.4); c.lineTo(-2.8, 6.2);
+    c.lineTo(-0.9, 4.6); c.lineTo(-1.2, 1.8); c.lineTo(-7, 3.4); c.lineTo(-7, 1.6);
+    c.lineTo(-1.2, -2);
+    c.bezierCurveTo(-1.2, -3.5, -1.2, -5, 0, -7);
+    c.closePath();
+    c.fill();
+    c.restore();
+  }
+  function fHalo(c, txt, x, y, font, color, halo) {
+    c.font = font;
+    c.textAlign = "center";
+    c.lineWidth = 4;
+    c.lineJoin = "round";
+    c.strokeStyle = halo;
+    c.strokeText(txt, x, y);
+    c.fillStyle = color;
+    c.fillText(txt, x, y);
+  }
+  function planeTrack(a) {
+    return fin(a.track) ? a.track : (fin(a.true_heading) ? a.true_heading : 0);
+  }
+
+  function drawFlights() {
+    var g = flights.geo;
+    if (!g || !flights.on) return;
+    var c = $("fplanes").getContext("2d");
+    c.setTransform(g.dpr, 0, 0, g.dpr, 0, 0);
+    c.clearRect(0, 0, g.W, g.H);
+    var ink = cssTok("--ink"), ink2 = cssTok("--ink-2"), lowC = cssTok("--temp"), halo = cssTok("--surface");
+    var vis = flights.planes.filter(function (a) {
+      var x = fx(a.lon), y = fy(a.lat);
+      return x > -60 && x < g.W + 60 && y > -60 && y < g.H + 60;
+    });
+    /* paint order: names first, trails ABOVE the names, glyphs on top */
+    vis.forEach(function (a) {
+      var x = fx(a.lon), y = fy(a.lat);
+      var low = fin(a.alt_baro) && a.alt_baro < 10000;
+      var cs = String(a.flight || a.r || a.hex || "").trim();
+      var al = airlineOf(cs);
+      var main = al || cs;
+      if (!main) return;
+      fHalo(c, main, x, y + 30, "700 15px system-ui, sans-serif", low ? lowC : ink, halo);
+      if (al && cs && al !== cs) fHalo(c, cs, x, y + 45, "500 12px system-ui, sans-serif", ink2, halo);
+    });
+    vis.forEach(function (a) {
+      var low = fin(a.alt_baro) && a.alt_baro < 10000;
+      var color = low ? lowC : ink;
+      var h = flights.hist[a.hex] || [];
+      if (!h.length) return;
+      /* complete trail: synthetic back-projection from the oldest real point, then real history */
+      var pts = [];
+      var o = h[0];
+      var rad = (o.trk + 180) * Math.PI / 180;
+      var kmLon = 111.32 * Math.cos(o.lat * Math.PI / 180), kmLat = 111.2;
+      for (var k = 30; k >= 1; k--) {
+        pts.push([o.lon + Math.sin(rad) * 3 * k / kmLon, o.lat + Math.cos(rad) * 3 * k / kmLat]);
+      }
+      h.forEach(function (q) { pts.push([q.lon, q.lat]); });
+      c.lineCap = "round";
+      c.lineWidth = 2.5;
+      for (var i = 0; i < pts.length - 1; i++) {
+        var x1 = fx(pts[i][0]), y1 = fy(pts[i][1]);
+        var x2 = fx(pts[i + 1][0]), y2 = fy(pts[i + 1][1]);
+        if ((x1 < -20 && x2 < -20) || (x1 > g.W + 20 && x2 > g.W + 20) ||
+            (y1 < -20 && y2 < -20) || (y1 > g.H + 20 && y2 > g.H + 20)) continue;
+        c.globalAlpha = 0.06 + 0.5 * (i / pts.length);
+        c.strokeStyle = color;
+        c.beginPath();
+        c.moveTo(x1, y1);
+        c.lineTo(x2, y2);
+        c.stroke();
+      }
+      c.globalAlpha = 1;
+    });
+    vis.forEach(function (a) {
+      var low = fin(a.alt_baro) && a.alt_baro < 10000;
+      planeGlyph(c, fx(a.lon), fy(a.lat), planeTrack(a), 1.5, low ? lowC : ink);
+    });
+  }
+
+  function fetchFlights() {
+    if (!flights.on || !radar.pos || document.hidden) return;
+    var p = radar.pos;
+    fetchJSON("https://api.airplanes.live/v2/point/" + p.lat.toFixed(3) + "/" + p.lon.toFixed(3) + "/39", 1)
+      .then(function (d) {
+        var list = ((d && d.ac) || []).filter(function (a) {
+          return fin(a.lat) && fin(a.lon) && a.alt_baro !== "ground" &&
+            Math.abs(a.lat - p.lat) < 0.5 && Math.abs(a.lon - p.lon) < 0.75;
+        }).slice(0, 40);
+        list.forEach(function (a) {
+          var h = flights.hist[a.hex] = flights.hist[a.hex] || [];
+          h.push({ lon: a.lon, lat: a.lat, trk: planeTrack(a) });
+          if (h.length > 60) h.shift();
+        });
+        flights.planes = list;
+        drawFlights();
+        document.body.setAttribute("data-state-flights", "ok");
+      }).catch(function () {});
+  }
+
+  function setFlights(on) {
+    flights.on = on;
+    var b = $("fltBtn");
+    b.setAttribute("aria-pressed", String(on));
+    b.setAttribute("aria-label", on ? "Hide live flights" : "Show live flights");
+    $("flightsCard").hidden = !on;
+    clearInterval(flights.timer);
+    if (on) {
+      flights.geo = flightsGeometry();
+      if (!flights.geo) { setFlights(false); return; }
+      drawFTilesAll();
+      fetchFlights();
+      flights.timer = setInterval(fetchFlights, FLT_REFRESH);
+    }
+  }
+  $("fltBtn").addEventListener("click", function () { setFlights(!flights.on); });
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden && flights.on) fetchFlights();
+  });
+  function flightsRedraw() {
+    if (!flights.on) return;
+    flights.geo = flightsGeometry();
+    if (!flights.geo) return;
+    drawFTilesAll();
+    drawFlights();
+  }
 
   /* ================= boot ================= */
   function locate() {
@@ -1100,6 +1332,7 @@
       if (ok && !NOMAP) {
         radar.pos = pos;
         initRadar(pos.lat, pos.lon, d0.times);
+        if (qs.get("flights") === "1") setFlights(true);
       }
     }).catch(function (e) {
       showNotice(e.message || "Something went wrong.", true);

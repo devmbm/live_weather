@@ -3,7 +3,7 @@
    - CARTO tiles: cache-first with a size cap (repeat visits in the same area cost no tile traffic)
    - GeoSphere API + geocoder: never cached (weather must be fresh) */
 
-var SHELL_CACHE = "rw-shell-v7";
+var SHELL_CACHE = "rw-shell-v8";
 var TILE_CACHE = "rw-tiles-v1";
 var TILE_LIMIT = 120;
 
@@ -52,7 +52,8 @@ self.addEventListener("fetch", function (e) {
 
   /* live data: always straight to the network */
   if (url.hostname.indexOf("geosphere.at") !== -1 ||
-      url.hostname.indexOf("bigdatacloud.net") !== -1) return;
+      url.hostname.indexOf("bigdatacloud.net") !== -1 ||
+      url.hostname.indexOf("airplanes.live") !== -1) return;
 
   /* map tiles: cache-first, capped */
   if (url.hostname === "basemaps.cartocdn.com") {
