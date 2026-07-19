@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:dataset.api.hub.geosphere.at)",
+      "Bash(curl -s -D - -o /tmp/resp.json \"https://dataset.api.hub.geosphere.at/v1/timeseries/forecast/nowcast-v1-15min-1km?parameters=rr,t2m&lat_lon=48.21,16.37&start=2026-07-19T12:00&end=2026-07-19T17:00\")",
+      "Read(//tmp/**)",
+      "Bash(curl -s \"https://dataset.api.hub.geosphere.at/v1/datasets\")",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(k, '|', v.get\\('type'\\), '|', v.get\\('mode'\\)\\) for k,v in d.items\\(\\) if '15min' in k or 'inca' in k or 'nowcast' in k or 'radar' in k.lower\\(\\)]\")",
+      "Bash(curl -s \"https://dataset.api.hub.geosphere.at/v1/timeseries/historical/inca-v1-1h-1km?parameters=rr&lat_lon=48.21,16.37&start=2026-07-19T10:00&end=2026-07-19T15:00\")",
+      "Bash(curl -s -o /tmp/grid.json -w \"size=%{size_download} time=%{time_total}s\\\\n\" \"https://dataset.api.hub.geosphere.at/v1/grid/forecast/nowcast-v1-15min-1km?parameters=rr&bbox=48.03,16.10,48.39,16.64&start=2026-07-19T14:15&end=2026-07-19T17:00&output_format=geojson\")",
+      "Bash(curl -s -o /tmp/grid.nc -w \"netcdf_size=%{size_download}\\\\n\" \"https://dataset.api.hub.geosphere.at/v1/grid/forecast/nowcast-v1-15min-1km?parameters=rr&bbox=48.03,16.10,48.39,16.64&start=2026-07-19T14:15&end=2026-07-19T17:00&output_format=netcdf\")",
+      "Bash(curl -s \"https://dataset.api.hub.geosphere.at/v1/timeseries/forecast/nowcast-v1-15min-1km?parameters=rr&lat_lon=48.21,16.37&forecast_offset=8\")",
+      "Bash(curl -s \"https://dataset.api.hub.geosphere.at/v1/timeseries/forecast/nowcast-v1-15min-1km?parameters=rr&lat_lon=48.21,16.37&forecast_offset=5&start=2026-07-19T12:30&end=2026-07-19T14:30\")",
+      "Bash(curl -s \"https://dataset.api.hub.geosphere.at/v1/station/historical/tawes-v1-10min?parameters=RR&station_ids=11035&start=2026-07-19T12:30&end=2026-07-19T14:40\")",
+      "Skill(dataviz)",
+      "Skill(dataviz:*)",
+      "Bash(grep -aoE '[a-zA-Z_][a-zA-Z0-9_ :-]{2,40}' /tmp/grid.nc)",
+      "Bash(grep -aiE 'lat|lon|^x$|^y$|time|rr|proj|lambert|epsg|grid|units|fill|coord|degree')",
+      "Bash(curl -s \"https://cdn.jsdelivr.net/npm/jsfive/package.json\")",
+      "Read(//c/Users/WDAGUtilityAccount/AppData/Local/Temp/claude/c--Users-WDAGUtilityAccount-Desktop-live-weather/06749fb4-b838-4c62-94b7-75d2e11d0f0c/scratchpad/**)",
+      "Bash(curl -s -o jsfive.mjs \"https://cdn.jsdelivr.net/npm/jsfive@0.4.0/dist/esm/index.mjs\")",
+      "PowerShell(Start-Process powershell -WindowStyle Hidden -ArgumentList \"-NoProfile\",\"-ExecutionPolicy\",\"Bypass\",\"-File\",\"C:\\\\Users\\\\WDAGUtilityAccount\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-WDAGUtilityAccount-Desktop-live-weather\\\\06749fb4-b838-4c62-94b7-75d2e11d0f0c\\\\scratchpad\\\\serve.ps1\"; Start-Sleep -Seconds 2; \\(Invoke-WebRequest -UseBasicParsing \"http://127.0.0.1:8123/index.html\"\\).StatusCode)",
+      "PowerShell($out = \"C:\\\\Users\\\\WDAGUtilityAccount\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-WDAGUtilityAccount-Desktop-live-weather\\\\06749fb4-b838-4c62-94b7-75d2e11d0f0c\\\\scratchpad\\\\dom.html\"; & \"C:\\\\Program Files \\(x86\\)\\\\Microsoft\\\\Edge\\\\Application\\\\msedge.exe\" --headless=new --disable-gpu --no-first-run --user-data-dir=\"C:\\\\Users\\\\WDAGUtilityAccount\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-WDAGUtilityAccount-Desktop-live-weather\\\\06749fb4-b838-4c62-94b7-75d2e11d0f0c\\\\scratchpad\\\\edgeprofile\" --virtual-time-budget=25000 --dump-dom \"http://127.0.0.1:8123/index.html?loc=48.30,16.32\" | Out-File -Encoding utf8 $out; \\(Get-Item $out\\).Length)",
+      "Bash(grep -oE 'id=\"rainBars\">.{0,400}' /c/Users/WDAGUtilityAccount/AppData/Local/Temp/claude/c--Users-WDAGUtilityAccount-Desktop-live-weather/06749fb4-b838-4c62-94b7-75d2e11d0f0c/scratchpad/dom.html)",
+      "PowerShell($out = \"C:\\\\Users\\\\WDAGUtilityAccount\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-WDAGUtilityAccount-Desktop-live-weather\\\\06749fb4-b838-4c62-94b7-75d2e11d0f0c\\\\scratchpad\\\\dom2.html\"; & \"C:\\\\Program Files \\(x86\\)\\\\Microsoft\\\\Edge\\\\Application\\\\msedge.exe\" --headless=new --disable-gpu --no-first-run --user-data-dir=\"C:\\\\Users\\\\WDAGUtilityAccount\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-WDAGUtilityAccount-Desktop-live-weather\\\\06749fb4-b838-4c62-94b7-75d2e11d0f0c\\\\scratchpad\\\\edgeprofile\" --virtual-time-budget=25000 --dump-dom \"http://127.0.0.1:8123/index.html?loc=48.30,16.32\" | Out-File -Encoding utf8 $out; \\(Get-Item $out\\).Length)",
+      "PowerShell($sp = \"C:\\\\Users\\\\WDAGUtilityAccount\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-WDAGUtilityAccount-Desktop-live-weather\\\\06749fb4-b838-4c62-94b7-75d2e11d0f0c\\\\scratchpad\"; Remove-Item -Recurse -Force \"$sp\\\\edgeprofile\" -ErrorAction SilentlyContinue; & \"C:\\\\Program Files \\(x86\\)\\\\Microsoft\\\\Edge\\\\Application\\\\msedge.exe\" --headless=new --disable-gpu --no-first-run --user-data-dir=\"$sp\\\\edgeprofile2\" --virtual-time-budget=25000 --dump-dom \"http://127.0.0.1:8123/index.html?loc=48.30,16.32\" | Out-File -Encoding utf8 \"$sp\\\\dom3.html\"; \\(Get-Item \"$sp\\\\dom3.html\"\\).Length)"
+    ]
+  }
+}

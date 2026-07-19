@@ -1,0 +1,193 @@
+<title>Ride Weather — Icon Designs</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    color-scheme: light;
+    --page: #eef1f4;
+    --surface: #ffffff;
+    --ink: #101a24;
+    --ink2: #55636f;
+    --ring: rgba(16,26,36,0.10);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --page: #10151a; --surface: #1a2129; --ink: #f2f5f8; --ink2: #9fadb9; --ring: rgba(255,255,255,0.10);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #10151a; --surface: #1a2129; --ink: #f2f5f8; --ink2: #9fadb9; --ring: rgba(255,255,255,0.10);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--page); color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 28px 16px 48px;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--ink2); font-size: 14px; margin: 0 0 24px; max-width: 640px; }
+  .grid {
+    display: grid; gap: 16px;
+    grid-template-columns: repeat(auto-fill, minmax(285px, 1fr));
+  }
+  .card {
+    background: var(--surface); border: 1px solid var(--ring); border-radius: 14px;
+    padding: 20px 18px 18px; display: flex; flex-direction: column; gap: 16px; align-items: center;
+  }
+  .big svg { display: block; filter: drop-shadow(0 8px 18px rgba(10,40,90,0.28)); }
+  .smalls { display: flex; align-items: flex-end; gap: 20px; }
+  .smalls figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .smalls figcaption { font-size: 10px; color: var(--ink2); }
+  .meta { text-align: center; }
+  .meta .tag {
+    display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 0.08em;
+    background: var(--ink); color: var(--surface); border-radius: 6px; padding: 2px 9px 3px; margin-bottom: 7px;
+  }
+  .meta h2 { font-size: 16px; margin: 0 0 3px; }
+  .meta p { font-size: 12.5px; color: var(--ink2); margin: 0; line-height: 1.45; }
+</style>
+
+<div class="wrap">
+  <h1>Ride Weather — Classic Radar, storm shapes</h1>
+  <p class="sub">Your pick (Classic Radar · dark, no location pixel) in six different rain-cloud shapes. Same colours everywhere — only the shape changes. Judge by the 60 / 40 px versions.</p>
+  <div class="grid" id="grid"></div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var SHAPES = {
+    comma: [
+      "...........",
+      "....11.....",
+      "..11221....",
+      ".1233321...",
+      ".1245542...",
+      "..2356631..",
+      "..1246531..",
+      "...12332...",
+      "....1121...",
+      "......1....",
+      "..........."
+    ],
+    round: [
+      "...........",
+      "...........",
+      "....121....",
+      "..1234321..",
+      ".124566421.",
+      ".135666531.",
+      ".124566421.",
+      "..1234321..",
+      "....121....",
+      "...........",
+      "..........."
+    ],
+    squall: [
+      "........11.",
+      ".......132.",
+      "......1431.",
+      ".....13541.",
+      "....14651..",
+      "...13651...",
+      "..12541....",
+      ".1341......",
+      ".121.......",
+      "11.........",
+      "..........."
+    ],
+    hook: [
+      "...........",
+      "...12321...",
+      "..1245431..",
+      ".124666421.",
+      ".135666531.",
+      ".124655421.",
+      "..1234321..",
+      "...121.....",
+      "...231.....",
+      "....32.....",
+      "..........."
+    ],
+    twin: [
+      "...........",
+      "..121......",
+      ".13431.....",
+      ".24652.....",
+      ".13531.....",
+      "..121......",
+      ".......121.",
+      "......12431",
+      "......13531",
+      ".......231.",
+      "..........."
+    ],
+    scattered: [
+      "...........",
+      "..12...11..",
+      ".1231..121.",
+      "..12....1..",
+      "...........",
+      "....1231...",
+      "...124421..",
+      "....1231...",
+      ".11........",
+      ".121.......",
+      "..........."
+    ]
+  };
+
+  var BG = "#101826";
+  var RAMP = ["#2f9de0", "#37c26e", "#a5d62e", "#f2c21e", "#ef7f24", "#e03535"];
+  var N = 11, PITCH = 44, CELL = 40, OFF = 16, RX = 5;
+
+  function rect(x, y, fill, opacity) {
+    return '<rect x="' + (OFF + x * PITCH) + '" y="' + (OFF + y * PITCH) +
+      '" width="' + CELL + '" height="' + CELL + '" rx="' + RX + '" fill="' + fill + '"' +
+      (opacity !== undefined ? ' opacity="' + opacity + '"' : "") + "/>";
+  }
+
+  function build(id, matrix) {
+    var s = '<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">' +
+      '<defs><clipPath id="sq-' + id + '"><rect x="0" y="0" width="512" height="512" rx="115"/></clipPath></defs>' +
+      '<g clip-path="url(#sq-' + id + ')">' +
+      '<rect width="512" height="512" fill="' + BG + '"/>';
+    for (var y = 0; y < N; y++) {
+      for (var x = 0; x < N; x++) {
+        var v = matrix[y].charAt(x);
+        if (v === "." || v === "") s += rect(x, y, "#ffffff", 0.05);
+        else s += rect(x, y, RAMP[+v - 1]);
+      }
+    }
+    s += "</g></svg>";
+    return s;
+  }
+
+  var VARIANTS = [
+    { tag: "A", key: "comma", name: "Comma", desc: "The shape you already saw — a storm cell with a trailing tail, like a front passing through." },
+    { tag: "B", key: "round", name: "Round Cell", desc: "One symmetric storm cell, red core dead centre. The calmest, most 'logo-like' composition." },
+    { tag: "C", key: "squall", name: "Squall Line", desc: "A diagonal band crossing the whole icon — the classic approaching front on a radar loop." },
+    { tag: "D", key: "hook", name: "Hook Echo", desc: "A supercell with the famous hook curling out of its lower-left — the radar nerd's choice." },
+    { tag: "E", key: "twin", name: "Twin Cells", desc: "A big storm and a smaller one trailing behind it — reads as a living radar picture." },
+    { tag: "F", key: "scattered", name: "Scattered", desc: "Several small showers, no red core — the friendly light-rain day. Subtlest of the six." }
+  ];
+
+  var grid = document.getElementById("grid");
+  VARIANTS.forEach(function (v, i) {
+    var svg = build(i, SHAPES[v.key]);
+    var card = document.createElement("div");
+    card.className = "card";
+    card.innerHTML =
+      '<div class="big" style="width:176px;height:176px">' + svg + "</div>" +
+      '<div class="smalls">' +
+        '<figure><div style="width:60px;height:60px">' + svg + "</div><figcaption>60 px</figcaption></figure>" +
+        '<figure><div style="width:40px;height:40px">' + svg + "</div><figcaption>40 px</figcaption></figure>" +
+      "</div>" +
+      '<div class="meta"><span class="tag">' + v.tag + "</span><h2>" + v.name + "</h2><p>" + v.desc + "</p></div>";
+    grid.appendChild(card);
+  });
+})();
+</script>
