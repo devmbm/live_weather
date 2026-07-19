@@ -35,7 +35,7 @@
     --chip-on-ink: #fcfcfb;
   }
   @media (prefers-color-scheme: dark) {
-    :root {
+    :root:where(:not([data-theme="light"])) {
       color-scheme: dark;
       --page: #0d0d0d;
       --surface: #1a1a19;
@@ -54,6 +54,25 @@
       --chip-on: #ffffff;
       --chip-on-ink: #0d0d0d;
     }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface: #1a1a19;
+    --ink: #ffffff;
+    --ink-2: #c3c2b7;
+    --muted: #898781;
+    --grid: #2c2c2a;
+    --baseline: #383835;
+    --ring: rgba(255,255,255,0.10);
+    --rain: #3987e5;
+    --rain-past: #1c5cab;
+    --temp: #d95926;
+    --temp-past: #8a3d1c;
+    --wind: #0ca30c;
+    --wind-past: #1e5c22;
+    --chip-on: #ffffff;
+    --chip-on-ink: #0d0d0d;
   }
 
   * { box-sizing: border-box; }
@@ -90,6 +109,20 @@
     letter-spacing: 0.01em;
   }
   .clock .sec { color: var(--ink-2); font-weight: 450; }
+  .theme-btn {
+    align-self: center;
+    flex: none;
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--ring);
+    background: var(--surface);
+    color: var(--ink);
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+  }
+  .theme-btn:focus-visible { outline: 2px solid var(--rain); outline-offset: 1px; }
   .place { text-align: right; min-width: 0; }
   .place .name {
     font-size: 16px; font-weight: 600;
@@ -235,10 +268,15 @@
 
   .radar-card { flex: 1 1 auto; padding-bottom: 8px; }
   .app.nomap .radar-card { display: none; }
+  .radar-outer {
+    flex: 1;
+    min-height: 150px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
   .radar-frame {
     position: relative;
-    flex: 1;
-    min-height: 120px;
     border-radius: 7px;
     overflow: hidden;
     background:
@@ -366,6 +404,7 @@
 <div class="app" id="app">
   <header>
     <div class="clock" id="clock">--:--<span class="sec">:--</span></div>
+    <button class="theme-btn" id="themeBtn" type="button" aria-label="Toggle light and dark mode">◐</button>
     <div class="place">
       <div class="name" id="placeName">&nbsp;</div>
       <div class="coords" id="placeCoords">&nbsp;</div>
@@ -390,11 +429,13 @@
   <section class="card" id="rainCard" aria-label="Rain, recent and next 3 hours" hidden>
     <h2>Rain · mm / 15 min</h2>
     <div class="bars" id="rainBars"></div>
+    <div class="xaxis" id="rainAxis"></div>
   </section>
 
   <section class="card" id="tempCard" aria-label="Temperature, recent and next 3 hours" hidden>
     <h2>Temperature · °C</h2>
     <div class="bars tbars" id="tempBars"></div>
+    <div class="xaxis" id="tempAxis"></div>
   </section>
 
   <section class="card" id="windCard" aria-label="Wind, recent and next 3 hours" hidden>
@@ -405,7 +446,8 @@
   </section>
 
   <section class="card radar-card" id="radarCard" aria-label="Rain radar" hidden>
-    <h2>Radar · 40 km across <span class="note">1 km grid</span></h2>
+    <h2>Radar · 40 × 40 km <span class="note">1 km grid</span></h2>
+    <div class="radar-outer">
     <div class="radar-frame mapped" id="radarFrame">
       <canvas id="basemap" aria-hidden="true"></canvas>
       <canvas id="radar" aria-label="Precipitation field around your location"></canvas>
@@ -415,6 +457,7 @@
       <div class="radar-note" id="radarNote">loading radar…</div>
       <div class="scalebar" id="scalebar" hidden><b></b>10 km</div>
       <div class="maphint" id="mapHint">© OpenStreetMap © CARTO</div>
+    </div>
     </div>
     <div class="controls">
       <div class="ticks" id="ticks" role="group" aria-label="Radar time step"></div>
@@ -450,6 +493,26 @@
   var $ = function (id) { return document.getElementById(id); };
   if (NOMAP) $("app").classList.add("nomap");
 
+  /* ================= theme toggle ================= */
+  function applyTheme(t) {
+    if (t) document.documentElement.setAttribute("data-theme", t);
+    else document.documentElement.removeAttribute("data-theme");
+    document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) {
+      if (t) {
+        m.removeAttribute("media");
+        m.setAttribute("content", t === "dark" ? "#0d0d0d" : "#f9f9f7");
+      }
+    });
+  }
+  try { applyTheme(localStorage.getItem("rw-theme") || null); } catch (e) {}
+  $("themeBtn").addEventListener("click", function () {
+    var next = isDark() ? "light" : "dark";
+    try { localStorage.setItem("rw-theme", next); } catch (e) {}
+    applyTheme(next);
+    drawRadarFrame();
+    if (radar.mapped && radar.geo) drawMaps();
+  });
+
   /* ================= clock ================= */
   var clockEl = $("clock");
   function pad(n) { return String(n).padStart(2, "0"); }
@@ -465,6 +528,9 @@
   function parseTs(s) {
     s = s.replace("+00:00", "Z");
     if (/T\d\d:\d\dZ?$/.test(s)) s = s.replace(/(T\d\d:\d\d)(Z?)$/, "$1:00$2");
+    /* no timezone marker → it's UTC (GeoSphere API and NetCDF convention),
+       otherwise JS would read it as local time and shift everything by 2 h */
+    if (!/[Zz]$|[+-]\d\d:?\d\d$/.test(s)) s += "Z";
     return new Date(s);
   }
   function hhmm(d) { return pad(d.getHours()) + ":" + pad(d.getMinutes()); }
@@ -666,7 +732,9 @@
     /* charts */
     $("rainCard").hidden = $("tempCard").hidden = $("windCard").hidden = false;
     buildBars($("rainBars"), rr, times, pastN, { baselined: true, unit: "mm", decimals: 1, floor: 1.5, labelMax: true });
+    buildAxis($("rainAxis"), times, pastN);
     buildBars($("tempBars"), t2m, times, pastN, { baselined: false, unit: "°C", decimals: 0, labelMax: true, labelMin: true });
+    buildAxis($("tempAxis"), times, pastN);
     var arrowsEl = $("windArrows");
     clearEl(arrowsEl);
     dd.forEach(function (deg, i) {
@@ -699,7 +767,11 @@
   var rampLight = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"];
   var rampDark  = ["#184f95", "#1c5cab", "#256abf", "#2a78d6", "#3987e5", "#6da7ec", "#9ec5f4"];
   var THRESH = [0.1, 0.25, 0.5, 1, 2, 4, 8];
-  function isDark() { return matchMedia("(prefers-color-scheme: dark)").matches; }
+  function isDark() {
+    var t = document.documentElement.getAttribute("data-theme");
+    if (t) return t === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  }
 
   function lon2gx(lon, z) { return (lon + 180) / 360 * 256 * Math.pow(2, z); }
   function lat2gy(lat, z) {
@@ -708,8 +780,13 @@
   }
 
   function radarGeometry(lat, lon) {
-    var W = radar.frame.clientWidth, H = radar.frame.clientHeight;
-    if (!W || !H) return null;
+    /* 1:1 panel: square side = smaller of the space the card offers */
+    var outer = radar.frame.parentElement;
+    var side = Math.floor(Math.min(outer.clientWidth, Math.max(outer.clientHeight, 140)));
+    if (!side) return null;
+    radar.frame.style.width = side + "px";
+    radar.frame.style.height = side + "px";
+    var W = side, H = side;
     var dpr = Math.min(2, window.devicePixelRatio || 1);
     var mpp = WIN_M / W;                                    /* metres per css px */
     var latRes = 156543.03392 * Math.cos(lat * Math.PI / 180);
@@ -893,6 +970,10 @@
       if (!frameTimes) frameTimes = fallbackTimes;
       radar.frameTimes = frameTimes;
       radar.nt = nt;
+      /* debugging aid: frame times as UTC hh:mm */
+      document.body.setAttribute("data-ft", frameTimes.map(function (t) {
+        return t.toISOString().slice(11, 16);
+      }).join(","));
 
       var g = radarGeometry(lat, lon);
       if (!g) throw new Error("radar panel has no size");
@@ -950,20 +1031,23 @@
 
   /* ================= boot ================= */
   function locate() {
-    return new Promise(function (resolve, reject) {
+    /* never fails: falls back to the centre of Vienna */
+    return new Promise(function (resolve) {
       var loc = qs.get("loc");
       if (loc) {
         var p = loc.split(",").map(parseFloat);
         if (p.length === 2 && fin(p[0]) && fin(p[1])) return resolve({ lat: p[0], lon: p[1] });
       }
-      if (!navigator.geolocation) return reject(new Error("Geolocation is not available in this browser."));
+      var vienna = function (msg) {
+        resolve({ lat: 48.2082, lon: 16.3719, fallback: msg });
+      };
+      if (!navigator.geolocation) return vienna("No geolocation here — showing Vienna.");
       navigator.geolocation.getCurrentPosition(
         function (pos) { resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }); },
         function (err) {
-          reject(new Error(err.code === 1 ? "Location permission denied — allow it and retry." :
-            "Could not get your location."));
+          vienna(err.code === 1 ? "Location denied — showing Vienna." : "No location fix — showing Vienna.");
         },
-        { timeout: 12000, maximumAge: 120000 });
+        { timeout: 8000, maximumAge: 120000 });
     });
   }
 
@@ -990,6 +1074,7 @@
       try { d5 = res[1] && extract(res[1]); } catch (e) {}
       var pos = res[2];
       var ok = renderPoint(d0, d5);
+      if (ok && pos.fallback) showNotice(pos.fallback, true);
       if (ok && !NOMAP) {
         radar.pos = pos;
         initRadar(pos.lat, pos.lon, d0.times);
