@@ -5,6 +5,9 @@ Shows a live clock, your location, current temperature, a plain-English rain out
 and three aligned 15-minute bar charts (rain / temperature / wind with direction arrows)
 covering the recent past and the next 3 hours — plus an auto-looping rain radar
 (40 km across, 1 km resolution) over a CARTO Voyager base map.
+Tap the place name in the header to search for any location by name instead of
+using GPS (results outside the coverage box are flagged); "Use my location"
+switches back.
 
 Data: [GeoSphere Austria](https://www.geosphere.at/) INCA nowcast
 (`nowcast-v1-15min-1km`, CC BY 4.0). Coverage is Austria and its close
@@ -45,6 +48,8 @@ No build step, no API keys, no server.
 - Weather: **© GeoSphere Austria**, CC BY 4.0 — shown in the footer.
 - Base map: **© OpenStreetMap contributors © CARTO** — shown on the map panel.
 - Reverse geocoding: [BigDataCloud free client API](https://www.bigdatacloud.com/) (no key).
+- Place search: [Photon](https://photon.komoot.io/) by komoot (no key) — only queried
+  when you search from the location picker, never on page load.
 
 ## Files
 

@@ -115,23 +115,43 @@
   .theme-btn {
     align-self: center;
     flex: none;
-    width: 32px; height: 32px;
+    /* 44 px = comfortable glove/on-the-bike touch target */
+    width: 44px; height: 44px;
     border-radius: 50%;
     border: 1px solid var(--ring);
     background: var(--surface);
     color: var(--ink);
-    font-size: 15px;
+    font-size: 19px;
     line-height: 1;
     cursor: pointer;
     padding: 0;
   }
   .theme-btn:focus-visible { outline: 2px solid var(--rain); outline-offset: 1px; }
-  .place { text-align: right; min-width: 0; }
-  .place .name {
-    font-size: 16px; font-weight: 600;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  .place {
+    appearance: none;
+    background: none;
+    border: 0;
+    margin: 0;
+    padding: 4px 0 4px 6px;
+    font: inherit;
+    color: inherit;
+    text-align: right;
+    min-width: 0;
+    align-self: center;
+    cursor: pointer;
   }
-  .place .coords { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .place:focus-visible { outline: 2px solid var(--rain); outline-offset: 2px; border-radius: 6px; }
+  .place .name {
+    display: flex; align-items: center; justify-content: flex-end; gap: 5px;
+    font-size: 16px; font-weight: 600;
+    border-bottom: 1px dotted var(--baseline);
+    padding-bottom: 2px;
+  }
+  .place .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .place .pin { flex: none; color: var(--rain); font-size: 13px; }
+  .place .pin[hidden] { display: none; }
+  .place .chev { flex: none; color: var(--muted); font-size: 9px; }
+  .place .coords { display: block; padding-top: 2px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
   .notice {
     background: var(--surface);
@@ -157,6 +177,67 @@
     border-radius: 7px;
     cursor: pointer;
   }
+
+  .loc-panel {
+    background: var(--surface);
+    border: 1px solid var(--ring);
+    border-radius: 12px;
+    padding: 10px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.10);
+  }
+  .loc-panel[hidden] { display: none; }
+  .loc-search {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--page);
+    border: 1px solid var(--grid);
+    border-radius: 9px;
+    padding: 2px 10px;
+  }
+  .loc-search svg { flex: none; color: var(--muted); }
+  .loc-search input {
+    flex: 1; min-width: 0;
+    background: none; border: 0; outline: none;
+    font: inherit;
+    font-size: 16px;              /* 16px stops iOS zoom-on-focus */
+    color: var(--ink);
+    padding: 9px 0;
+  }
+  .loc-search input::placeholder { color: var(--muted); }
+  .loc-note {
+    display: flex; gap: 6px;
+    font-size: 11px; color: var(--muted);
+    line-height: 1.45;
+    padding: 8px 4px 2px;
+  }
+  .loc-note b { color: var(--ink-2); }
+  .loc-results { margin-top: 4px; }
+  .loc-results .res {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+    width: 100%;
+    background: none; border: 0; border-top: 1px solid var(--grid);
+    font: inherit; color: inherit; text-align: left;
+    padding: 12px 6px;
+    cursor: pointer;
+  }
+  .loc-results .res:focus-visible { outline: 2px solid var(--rain); outline-offset: -2px; border-radius: 6px; }
+  .loc-results .res .n { font-weight: 600; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .loc-results .res .r { flex: none; font-size: 11px; color: var(--muted); }
+  .loc-results .res.off { cursor: default; }
+  .loc-results .res.off .n { color: var(--muted); font-weight: 500; }
+  .loc-results .res.off .r { color: var(--temp); }
+  .loc-results .msg { border-top: 1px solid var(--grid); padding: 12px 6px; font-size: 13px; color: var(--muted); }
+  .loc-myloc {
+    display: flex; align-items: center; gap: 8px;
+    width: 100%;
+    background: none; border: 0; border-top: 1px solid var(--grid);
+    font: inherit; font-size: 14px; font-weight: 600;
+    color: var(--rain);
+    padding: 12px 6px 6px;
+    margin-top: 2px;
+    cursor: pointer;
+  }
+  .loc-myloc[hidden] { display: none; }
+  .loc-myloc:focus-visible { outline: 2px solid var(--rain); outline-offset: -2px; border-radius: 6px; }
 
   .now {
     display: flex;
@@ -413,11 +494,26 @@
   <header>
     <div class="clock" id="clock">--:--<span class="sec">:--</span></div>
     <button class="theme-btn" id="themeBtn" type="button" aria-label="Toggle light and dark mode">◐</button>
-    <div class="place">
-      <div class="name" id="placeName">&nbsp;</div>
-      <div class="coords" id="placeCoords">&nbsp;</div>
-    </div>
+    <button class="place" id="placeBtn" type="button" aria-expanded="false" aria-controls="locPanel" title="Change location">
+      <span class="name"><span class="pin" id="placePin" hidden>⌖</span><span class="nm" id="placeName">&nbsp;</span><span class="chev" aria-hidden="true">▾</span></span>
+      <span class="coords" id="placeCoords">&nbsp;</span>
+    </button>
   </header>
+
+  <div class="loc-panel" id="locPanel" hidden>
+    <form id="locForm">
+      <div class="loc-search">
+        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="6" cy="6" r="4.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9.2 9.2 L12.6 12.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <input id="locInput" type="search" placeholder="Search a place…" autocomplete="off" enterkeyhint="search" aria-label="Search a place">
+      </div>
+    </form>
+    <div class="loc-note"><span aria-hidden="true">ⓘ</span><span>Weather data is <b>GeoSphere Austria</b> — results only work for Austria and its close surroundings.</span></div>
+    <div class="loc-results" id="locResults"></div>
+    <button class="loc-myloc" id="myLocBtn" type="button" hidden>
+      <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true"><circle cx="7.5" cy="7.5" r="4.4" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="7.5" cy="7.5" r="1.6" fill="currentColor"/><path d="M7.5 0.7 V2.9 M7.5 12.1 V14.3 M0.7 7.5 H2.9 M12.1 7.5 H14.3" stroke="currentColor" stroke-width="1.5"/></svg>
+      Use my location
+    </button>
+  </div>
 
   <div class="notice" id="notice"><span id="noticeText">Locating you…</span><button id="retryBtn" type="button" hidden>Retry</button></div>
 
@@ -683,9 +779,12 @@
   function compass(deg) { return COMPASS[Math.round(deg / 22.5) % 16]; }
 
   /* ================= place name ================= */
-  function loadPlaceName(lat, lon) {
+  function loadPlaceName(lat, lon, fixedName) {
     $("placeCoords").textContent = Math.abs(lat).toFixed(3) + "° " + (lat >= 0 ? "N" : "S") +
       " · " + Math.abs(lon).toFixed(3) + "° " + (lon >= 0 ? "E" : "W");
+    /* searched location: we already know its name — pin it, skip the geocoder */
+    $("placePin").hidden = !fixedName;
+    if (fixedName) { $("placeName").textContent = fixedName; return; }
     var key = "rw-place:" + lat.toFixed(2) + "," + lon.toFixed(2);
     try {
       var cached = localStorage.getItem(key);
@@ -700,6 +799,106 @@
         }
       }).catch(function () {});
   }
+
+  /* ================= location picker (zero requests until the place name is tapped) ================= */
+  var GEOSEARCH = "https://photon.komoot.io/api/";
+  /* INCA coverage box — Austria and its close surroundings */
+  var INCA = { latMin: 45.5, latMax: 49.5, lonMin: 8.1, lonMax: 17.7 };
+  var placeBtn = $("placeBtn"), locPanel = $("locPanel"), locInput = $("locInput"),
+      locResults = $("locResults"), myLocBtn = $("myLocBtn");
+
+  function inCoverage(lat, lon) {
+    return lat >= INCA.latMin && lat <= INCA.latMax && lon >= INCA.lonMin && lon <= INCA.lonMax;
+  }
+  function savedLoc() {
+    try {
+      var o = JSON.parse(localStorage.getItem("rw-loc"));
+      if (o && fin(o.lat) && fin(o.lon)) return o;
+    } catch (e) {}
+    return null;
+  }
+
+  function setPanel(open) {
+    locPanel.hidden = !open;
+    placeBtn.setAttribute("aria-expanded", String(open));
+    if (open) {
+      myLocBtn.hidden = !savedLoc();
+      locInput.focus();
+      locInput.select();
+    }
+  }
+  placeBtn.addEventListener("click", function () { setPanel(locPanel.hidden); });
+  locInput.addEventListener("keydown", function (e) { if (e.key === "Escape") setPanel(false); });
+
+  function locMsg(txt) {
+    clearEl(locResults);
+    var m = document.createElement("div");
+    m.className = "msg";
+    m.textContent = txt;
+    locResults.appendChild(m);
+  }
+
+  $("locForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    var q = locInput.value.trim();
+    if (!q) return;
+    locInput.blur();                       /* drop the keyboard so results are visible */
+    locMsg("Searching…");
+    var bias = radar.pos || { lat: 47.6, lon: 14.3 };   /* centre of Austria */
+    fetchJSON(GEOSEARCH + "?q=" + encodeURIComponent(q) + "&limit=6&lang=en" +
+      "&lat=" + bias.lat.toFixed(3) + "&lon=" + bias.lon.toFixed(3), 1)
+      .then(showLocResults)
+      .catch(function () { locMsg("Search failed — check your connection and try again."); });
+  });
+
+  function showLocResults(d) {
+    clearEl(locResults);
+    var seen = {};
+    var feats = ((d && d.features) || []).filter(function (f) {
+      var p = f.properties || {};
+      var k = (p.name || "") + "|" + (p.state || p.county || p.country || "");
+      if (!p.name || seen[k] || !f.geometry) return false;
+      seen[k] = 1;
+      return true;
+    });
+    if (!feats.length) { locMsg("No places found."); return; }
+    feats.forEach(function (f) {
+      var p = f.properties;
+      var lon = f.geometry.coordinates[0], lat = f.geometry.coordinates[1];
+      var ok = inCoverage(lat, lon);
+      var region = p.state || p.county || p.country || "";
+      var row = document.createElement(ok ? "button" : "div");
+      if (ok) row.type = "button";
+      row.className = "res" + (ok ? "" : " off");
+      var n = document.createElement("span");
+      n.className = "n";
+      n.textContent = ok ? p.name :
+        p.name + (p.country && p.countrycode !== "AT" ? ", " + p.country : "");
+      var r = document.createElement("span");
+      r.className = "r";
+      r.textContent = ok ? region : "outside coverage";
+      row.appendChild(n);
+      row.appendChild(r);
+      if (ok) row.addEventListener("click", function () {
+        setLocation({ lat: lat, lon: lon, name: p.name });
+      });
+      locResults.appendChild(row);
+    });
+    myLocBtn.hidden = false;
+  }
+
+  function setLocation(loc) {
+    try {
+      if (loc) localStorage.setItem("rw-loc", JSON.stringify(loc));
+      else localStorage.removeItem("rw-loc");
+    } catch (e) {}
+    setPanel(false);
+    locInput.value = "";
+    clearEl(locResults);
+    if (flights.on) setFlights(false);
+    boot();
+  }
+  myLocBtn.addEventListener("click", function () { setLocation(null); });
 
   /* ================= point data ================= */
   function extract(resp) {
@@ -1268,6 +1467,8 @@
         var p = loc.split(",").map(parseFloat);
         if (p.length === 2 && fin(p[0]) && fin(p[1])) return resolve({ lat: p[0], lon: p[1] });
       }
+      var saved = savedLoc();
+      if (saved) return resolve({ lat: saved.lat, lon: saved.lon, name: saved.name, custom: true });
       var vienna = function (msg) {
         resolve({ lat: 48.2082, lon: 16.3719, fallback: msg });
       };
@@ -1285,7 +1486,7 @@
     showNotice("Locating you…", false);
     locate().then(function (pos) {
       showNotice("Loading weather…", false);
-      loadPlaceName(pos.lat, pos.lon);
+      loadPlaceName(pos.lat, pos.lon, pos.custom ? pos.name : null);
       var ll = pos.lat.toFixed(4) + "," + pos.lon.toFixed(4);
       /* explicit window: without it the API starts at the current quarter-hour,
          which would drop the past steps of the offset run and the run's first step */
