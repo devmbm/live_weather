@@ -50,6 +50,9 @@ No build step, no API keys, no server.
 - Reverse geocoding: [BigDataCloud free client API](https://www.bigdatacloud.com/) (no key).
 - Place search: [Photon](https://photon.komoot.io/) by komoot (no key) — only queried
   when you search from the location picker, never on page load.
+- Live flights (opt-in ✈ button): [airplanes.live](https://airplanes.live/) for aircraft
+  positions; [adsb.lol](https://adsb.lol/) `routeset` for the origin–destination route
+  (no key). Each callsign's route is fetched once and cached for the session.
 
 ## Files
 

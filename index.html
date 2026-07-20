@@ -379,11 +379,18 @@
   .radar-frame.mapped #labelmap { display: block; }
   .me {
     position: absolute; top: 50%; left: 50%;
-    width: 11px; height: 11px; border-radius: 50%;
+    width: 13px; height: 13px; border-radius: 50%;
     transform: translate(-50%, -50%);
-    background: var(--ink);
-    border: 2.5px solid var(--surface);
-    box-shadow: 0 0 0 1px var(--ring);
+    background: #1a73e8;                 /* Google-Maps blue dot */
+    border: 2.5px solid #fff;
+    box-shadow: 0 0 0 1.5px rgba(26,115,232,0.9), 0 1px 5px rgba(0,0,0,0.45);
+  }
+  .me::before {                          /* soft accuracy halo */
+    content: ""; position: absolute; top: 50%; left: 50%;
+    width: 46px; height: 46px; border-radius: 50%;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(circle, rgba(26,115,232,0.22), rgba(26,115,232,0) 70%);
+    pointer-events: none;
   }
   .frame-label {
     position: absolute; top: 7px; right: 8px;
@@ -412,12 +419,6 @@
     padding: 1px 5px 2px; border-radius: 4px;
   }
   .scalebar b { display: inline-block; width: 42px; height: 2px; background: var(--ink-2); vertical-align: middle; margin-right: 5px; }
-  .maphint {
-    position: absolute; right: 8px; bottom: 7px;
-    font-size: 10px; color: var(--muted);
-    background: color-mix(in srgb, var(--surface) 80%, transparent);
-    padding: 1px 6px 2px; border-radius: 4px;
-  }
 
   .controls {
     display: flex; gap: 6px; margin-top: 7px; align-items: stretch;
@@ -472,6 +473,7 @@
     padding-bottom: 2px;
   }
   footer a { color: inherit; }
+  footer .attrib { display: block; margin-top: 2px; opacity: 0.85; }
 
   .tip {
     position: fixed;
@@ -561,7 +563,6 @@
       <div class="frame-label" id="frameLabel"></div>
       <div class="radar-note" id="radarNote">loading radar…</div>
       <div class="scalebar" id="scalebar" hidden><b></b>10 km</div>
-      <div class="maphint" id="mapHint">© OpenStreetMap © CARTO</div>
     </div>
     </div>
     <div class="controls">
@@ -575,6 +576,7 @@
   <footer>
     Data <a href="https://www.geosphere.at/" rel="noopener">© GeoSphere Austria</a> (CC BY 4.0)
     <span id="runInfo"></span>
+    <span class="attrib" id="mapAttrib">Map © OpenStreetMap · © CARTO</span>
   </footer>
 </div>
 <div class="tip" id="tip"></div>
@@ -1263,8 +1265,10 @@
 
   /* ================= flights (opt-in: zero requests until the ✈ button) ================= */
   /* flights render straight onto the radar frame; the rain overlay + loop pause while on */
-  var flights = { on: false, timer: null, hist: {}, planes: [] };
+  var flights = { on: false, timer: null, hist: {}, planes: [], routes: {} };
   var FLT_REFRESH = 15000;
+  var ROUTES_API = "https://api.adsb.lol/api/0/routeset";   /* callsign → IATA route, keyless */
+  var RT_PENDING = "pending", RT_NONE = "none";  /* flights.routes[cs] states besides a real route */
   var AIRLINES = {
     AUA: "Austrian", DLH: "Lufthansa", RYR: "Ryanair", WZZ: "Wizz Air", WMT: "Wizz Air",
     EZY: "easyJet", EJU: "easyJet", BAW: "British Airways", AFR: "Air France", KLM: "KLM",
@@ -1276,8 +1280,7 @@
   };
   function airlineOf(cs) {
     var m = /^([A-Z]{3})\d/.exec(cs);
-    if (m) return AIRLINES[m[1]] || null;
-    return cs ? "private" : null;
+    return (m && AIRLINES[m[1]]) || null;   /* airline name in Sentence Case, or null → fall back to callsign */
   }
   function cssTok(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
 
@@ -1313,28 +1316,33 @@
     c.arcTo(x, y, x + w, y, r);
     c.closePath();
   }
-  /* white text on a black plate, centred on x, stacked from `top` down */
-  function drawLabel(c, lines, x, top) {
-    var padX = 5, padY = 3, gap = 2, maxW = 0, totalH = 0;
+  var LBL_PADY = 3, LBL_GAP = 2;
+  /* box size a label will occupy, so it can be de-conflicted before it's drawn */
+  function measureLabel(c, lines) {
+    var padX = 5, maxW = 0, totalH = 0;
     lines.forEach(function (l) {
       c.font = l.font;
-      l.w = c.measureText(l.txt).width;
-      if (l.w > maxW) maxW = l.w;
+      var w = c.measureText(l.txt).width;
+      if (w > maxW) maxW = w;
       totalH += l.size;
     });
-    totalH += gap * (lines.length - 1);
-    var boxW = maxW + padX * 2, boxH = totalH + padY * 2, bx = x - boxW / 2;
+    totalH += LBL_GAP * (lines.length - 1);
+    return { w: maxW + padX * 2, h: totalH + LBL_PADY * 2 };
+  }
+  /* white text on a black plate, centred on x, stacked from `top` down */
+  function drawLabelAt(c, lines, x, top, boxW) {
+    var bx = x - boxW / 2;
     c.fillStyle = "rgba(0,0,0,0.82)";
-    roundRect(c, bx, top, boxW, boxH, 3);
+    roundRect(c, bx, top, boxW, measureLabel(c, lines).h, 3);
     c.fill();
     c.textAlign = "center";
     c.textBaseline = "top";
     c.fillStyle = "#fff";
-    var ty = top + padY;
+    var ty = top + LBL_PADY;
     lines.forEach(function (l) {
       c.font = l.font;
       c.fillText(l.txt, x, ty);
-      ty += l.size + gap;
+      ty += l.size + LBL_GAP;
     });
     c.textBaseline = "alphabetic";
   }
@@ -1354,15 +1362,36 @@
       return x > -60 && x < g.W + 60 && y > -60 && y < g.H + 60;
     });
     /* paint order: labels first, trails ABOVE the labels, glyphs on top */
+    /* build every label, then push overlapping ones downward so they stay readable */
+    var labels = [];
     vis.forEach(function (a) {
       var x = fx(a.lon), y = fy(a.lat);
       var cs = String(a.flight || a.r || a.hex || "").trim();
-      var al = airlineOf(cs);
-      var main = al || cs;
-      if (!main) return;
-      var lines = [{ txt: main.toUpperCase(), font: "700 16px system-ui, sans-serif", size: 16 }];
-      if (al && cs && al !== cs) lines.push({ txt: cs, font: "600 12px system-ui, sans-serif", size: 12 });
-      drawLabel(c, lines, x, y + 12);
+      var name = airlineOf(cs) || cs;             /* airline in Sentence Case, else the callsign */
+      if (!name) return;
+      var lines = [{ txt: name, font: "700 15px system-ui, sans-serif", size: 15 }];
+      var route = flights.routes[cs];             /* "VIE-STR" | RT_PENDING | RT_NONE | undefined */
+      var routeTxt = (route && route !== RT_PENDING && route !== RT_NONE) ? route
+                   : (route === RT_NONE ? null : "Fetching…");   /* show placeholder until it loads */
+      if (routeTxt) lines.push({ txt: routeTxt, font: "600 15px system-ui, sans-serif", size: 15 });
+      var dim = measureLabel(c, lines);
+      labels.push({ x: x, top: y + 12, w: dim.w, h: dim.h, lines: lines });
+    });
+    labels.sort(function (p, q) { return p.top - q.top; });   /* place topmost first */
+    var placed = [];
+    labels.forEach(function (L) {
+      var bx = L.x - L.w / 2, guard = 0, hit;
+      function overlap() {
+        for (var i = 0; i < placed.length; i++) {
+          var P = placed[i];
+          if (bx < P.x + P.w + 2 && bx + L.w + 2 > P.x &&
+              L.top < P.top + P.h + 2 && L.top + L.h + 2 > P.top) return P;
+        }
+        return null;
+      }
+      while ((hit = overlap()) && guard++ < 200) L.top = hit.top + hit.h + 2;
+      placed.push({ x: bx, top: L.top, w: L.w, h: L.h });
+      drawLabelAt(c, L.lines, L.x, L.top, L.w);
     });
     vis.forEach(function (a) {
       var low = fin(a.alt_baro) && a.alt_baro < 10000;
@@ -1416,8 +1445,41 @@
         });
         flights.planes = list;
         drawFlights();
+        fetchRoutes(list);
         document.body.setAttribute("data-state-flights", "ok");
       }).catch(function () {});
+  }
+
+  /* one batched lookup, only for callsigns we've never asked about — every route is fetched
+     exactly once and then reused on all later 15 s ticks, so redraws cost no bandwidth */
+  function fetchRoutes(list) {
+    var need = [];
+    list.forEach(function (a) {
+      var cs = String(a.flight || "").trim();
+      if (cs && !(cs in flights.routes)) {
+        need.push({ callsign: cs, lat: a.lat, lng: a.lon });
+        flights.routes[cs] = RT_PENDING;            /* marks it requested → shows "Fetching…" */
+      }
+    });
+    if (!need.length) return;
+    fetch(ROUTES_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ planes: need })
+    }).then(function (r) { return r.ok ? r.json() : null; }).then(function (arr) {
+      (arr || []).forEach(function (row) {
+        if (!row || !row.callsign) return;
+        var codes = row._airport_codes_iata;
+        flights.routes[row.callsign] =
+          (codes && codes !== "unknown" && codes.indexOf("-") !== -1) ? codes : RT_NONE;
+      });
+      /* anything asked-for but absent from the reply has no known route */
+      need.forEach(function (p) { if (flights.routes[p.callsign] === RT_PENDING) flights.routes[p.callsign] = RT_NONE; });
+      if (flights.on) drawFlights();
+    }).catch(function () {
+      /* failed lookup: forget it so a later tick can retry (don't strand it on "Fetching…") */
+      need.forEach(function (p) { if (flights.routes[p.callsign] === RT_PENDING) delete flights.routes[p.callsign]; });
+    });
   }
 
   function clearPlanes() {
@@ -1425,14 +1487,14 @@
     c.setTransform(1, 0, 0, 1, 0, 0);
     c.clearRect(0, 0, radar.planes.width, radar.planes.height);
   }
-  var mapHintBase = $("mapHint").textContent;
+  var attribBase = $("mapAttrib").textContent;
 
   function setFlights(on) {
     flights.on = on;
     var b = $("fltBtn");
     b.setAttribute("aria-pressed", String(on));
     b.setAttribute("aria-label", on ? "Hide live flights" : "Show live flights");
-    $("mapHint").textContent = on ? mapHintBase + " · airplanes.live" : mapHintBase;
+    $("mapAttrib").textContent = on ? attribBase + " · Flights airplanes.live" : attribBase;
     clearInterval(flights.timer);
     flights.timer = null;
     if (on) {

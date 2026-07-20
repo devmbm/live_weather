@@ -42,7 +42,13 @@
       "Bash(curl -s -D - -o /tmp/route.json -X POST -H \"Content-Type: application/json\" -H \"Origin: https://devmbm.github.io\" -d '{\"planes\":[{\"callsign\":\"AUA270A\",\"lat\":48.4,\"lng\":15.9}]}' \"https://api.adsb.lol/api/0/routeset\")",
       "Bash(curl -sv -X POST -H \"Content-Type: application/json\" -H \"Origin: https://devmbm.github.io\" -d '{\"planes\":[{\"callsign\":\"AUA270A\",\"lat\":48.4,\"lng\":15.9}]}' \"https://api.adsb.lol/api/0/routeset\" -o /tmp/route.json)",
       "Bash(curl -sv -H \"Origin: https://devmbm.github.io\" \"https://hexdb.io/api/v1/route/icao/AUA270\" -o /tmp/hex.json)",
-      "Bash(curl -sv -H \"Origin: https://devmbm.github.io\" \"https://api.adsb.lol/v2/callsign/AUA270\" -o /dev/null)"
+      "Bash(curl -sv -H \"Origin: https://devmbm.github.io\" \"https://api.adsb.lol/v2/callsign/AUA270\" -o /dev/null)",
+      "Bash(curl -s --max-time 20 \"https://api.airplanes.live/v2/point/48.1/16.5/50\")",
+      "Bash(echo \"=== EXIT $? ===\")",
+      "Bash(curl -s --max-time 20 -w \"\\\\nHTTP %{http_code} bytes=%{size_download}\\\\n\" \"https://api.airplanes.live/v2/point/48.1/16.5/100\")",
+      "Bash(curl -s --max-time 20 -w \"\\\\nHTTP %{http_code}\\\\n\" -X POST \"https://api.airplanes.live/api/0/routeset\" -H \"Content-Type: application/json\" -d '{\"planes\":[{\"callsign\":\"AUA123\",\"lat\":48.1,\"lng\":16.5}]}')",
+      "Bash(curl -s --max-time 15 -w \"HTTP %{http_code}\\\\n\" -o /dev/null https://example.com)",
+      "Bash(echo \"exit $?\")"
     ]
   }
 }
