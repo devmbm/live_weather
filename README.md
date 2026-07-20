@@ -1,13 +1,15 @@
 # Ride Weather
 
 A one-screen, low-bandwidth weather nowcast for cycling in Austria, built for GitHub Pages.
-Shows a live clock, your location, current temperature, a plain-English rain outlook, wind,
-and three aligned 15-minute bar charts (rain / temperature / wind with direction arrows)
-covering the recent past and the next 3 hours — plus an auto-looping rain radar
-(40 km across, 1 km resolution) over a CARTO Voyager base map.
-Tap the place name in the header to search for any location by name instead of
-using GPS (results outside the coverage box are flagged); "Use my location"
-switches back.
+A single top line shows your location (with a blue "you are here" dot when geolocated),
+the current temperature, wind (direction arrow only), and a colour-coded UV index; a second
+line gives a plain-English rain outlook that turns blue for rain and blinking amber for a
+storm. Below are three aligned 15-minute bar charts (rain / temperature / wind with direction
+arrows) covering the recent past and the next 3 hours, an auto-looping rain radar
+(40 km across, 1 km resolution) over a CARTO Voyager base map, and a UV-index graph for the day.
+Tap the place name to search for any location by name instead of using GPS (results outside
+the coverage box are flagged); "Use my location" switches back. The light/dark toggle sits at
+the bottom of the page.
 
 Data: [GeoSphere Austria](https://www.geosphere.at/) INCA nowcast
 (`nowcast-v1-15min-1km`, CC BY 4.0). Coverage is Austria and its close
@@ -51,7 +53,9 @@ No build step, no API keys, no server.
 - Place search: [Photon](https://photon.komoot.io/) by komoot (no key) — only queried
   when you search from the location picker, never on page load.
 - Live flights (opt-in ✈ button): [airplanes.live](https://airplanes.live/) for aircraft
-  positions (no key) — one request per 15 s, only while the flights panel is open.
+  positions (no key), one request per 15 s, only while the flights panel is open.
+- UV index: [Open-Meteo](https://open-meteo.com/) (`uv_index`, no key). One small call per
+  visit feeds the "UV" pill up top and the UV graph.
 
 ## Files
 

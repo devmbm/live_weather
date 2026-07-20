@@ -33,6 +33,10 @@
     --wind-past: #a3d1a3;
     --chip-on: #0b0b0b;
     --chip-on-ink: #fcfcfb;
+    --rain-dry-bg: transparent; --rain-dry-ink: var(--muted);
+    --rain-wet-bg: transparent; --rain-wet-ink: var(--rain);
+    --alert: #e8820e; --alert-ink: #8a4b00;
+    --uv-low: #4eb400; --uv-mod: #f7e400; --uv-high: #f85900; --uv-vhigh: #d8001d; --uv-ext: #8a4fc8;
   }
   @media (prefers-color-scheme: dark) {
     :root:where(:not([data-theme="light"])) {
@@ -53,6 +57,9 @@
       --wind-past: #1e5c22;
       --chip-on: #ffffff;
       --chip-on-ink: #0d0d0d;
+      --rain-dry-bg: rgba(255,255,255,0.06); --rain-dry-ink: #b7b5ad;
+      --rain-wet-bg: #9ac5ff; --rain-wet-ink: #0e4699;
+      --alert: #fbbf24; --alert-ink: #fcd34d;
     }
   }
   :root[data-theme="dark"] {
@@ -73,6 +80,9 @@
     --wind-past: #1e5c22;
     --chip-on: #ffffff;
     --chip-on-ink: #0d0d0d;
+    --rain-dry-bg: rgba(255,255,255,0.06); --rain-dry-ink: #b7b5ad;
+    --rain-wet-bg: #9ac5ff; --rain-wet-ink: #0e4699;
+    --alert: #fbbf24; --alert-ink: #fcd34d;
   }
 
   * { box-sizing: border-box; }
@@ -98,60 +108,65 @@
      (iOS Safari shrinks flex children against min-height containers) */
   .app > * { flex-shrink: 0; }
 
+  /* top line: location (+ geo dot) on the left, temp · wind · UV on the right */
   header {
     display: flex;
     align-items: baseline;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 2px 2px 0;
+    gap: 10px;
+    padding: 2px 2px 0 10px;
   }
-  .clock {
-    font-size: clamp(26px, 8vw, 34px);
-    font-weight: 650;
-    font-variant-numeric: tabular-nums;
-    letter-spacing: 0.01em;
-  }
-  .clock .sec { color: var(--ink-2); font-weight: 450; }
-  .theme-btn {
-    align-self: center;
-    flex: none;
-    /* 44 px = comfortable glove/on-the-bike touch target */
-    width: 44px; height: 44px;
-    border-radius: 50%;
-    border: 1px solid var(--ring);
-    background: var(--surface);
-    color: var(--ink);
-    font-size: 19px;
-    line-height: 1;
-    cursor: pointer;
-    padding: 0;
-  }
-  .theme-btn:focus-visible { outline: 2px solid var(--rain); outline-offset: 1px; }
   .place {
-    appearance: none;
-    background: none;
-    border: 0;
-    margin: 0;
-    padding: 4px 0 4px 6px;
-    font: inherit;
-    color: inherit;
-    text-align: right;
-    min-width: 0;
-    align-self: center;
-    cursor: pointer;
+    appearance: none; background: none; border: 0; margin: 0; padding: 2px 0;
+    font: inherit; color: inherit; cursor: pointer;
+    display: inline-flex; align-items: baseline; gap: 5px; min-width: 0; flex: 0 1 auto;
   }
   .place:focus-visible { outline: 2px solid var(--rain); outline-offset: 2px; border-radius: 6px; }
-  .place .name {
-    display: flex; align-items: center; justify-content: flex-end; gap: 5px;
-    font-size: 16px; font-weight: 600;
-    border-bottom: 1px dotted var(--baseline);
-    padding-bottom: 2px;
+  .place .nm {
+    font-size: 15px; font-weight: 650;
+    border-bottom: 1px dotted var(--baseline); padding-bottom: 1px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
   }
-  .place .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-  .place .pin { flex: none; color: var(--rain); font-size: 13px; }
-  .place .pin[hidden] { display: none; }
-  .place .chev { flex: none; color: var(--muted); font-size: 9px; }
-  .place .coords { display: block; padding-top: 2px; font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .medot {
+    flex: none; align-self: center; width: 10px; height: 10px; border-radius: 50%;
+    background: #1a73e8; border: 2px solid var(--surface);
+    box-shadow: 0 0 0 1.3px #1a73e8, 0 1px 3px rgba(0,0,0,0.35);
+  }
+  .medot[hidden] { display: none; }
+  .metrics { margin-left: auto; flex: none; display: inline-flex; align-items: baseline; gap: 12px; }
+  .metrics[hidden] { display: none; }
+  .temp { font-size: 26px; font-weight: 750; line-height: 1; color: var(--temp); font-variant-numeric: tabular-nums; }
+  .wind { display: inline-flex; align-items: center; gap: 2px; color: var(--ink); font-weight: 650; font-size: 16px; line-height: 1; font-variant-numeric: tabular-nums; }
+  .wind svg { flex: none; }
+  .wind small { font-weight: 500; color: var(--ink-2); font-size: 10px; margin-left: 3px; }
+  .uvpill { display: inline-flex; align-items: baseline; gap: 4px; padding: 3px 9px; border-radius: 999px; font-weight: 700; font-size: 13px; line-height: 1; color: #fff; font-variant-numeric: tabular-nums; }
+  .uvpill[hidden] { display: none; }
+  .uvpill .uvk { font-size: 10px; font-weight: 700; letter-spacing: 0.03em; opacity: 0.95; }
+
+  /* second line: plain-English rain outlook, coloured by state */
+  .rain {
+    align-self: flex-start; margin-top: -2px;
+    font-size: 14px; font-weight: 600; line-height: 1.3;
+    color: var(--rain-dry-ink); background: var(--rain-dry-bg);
+    padding: 3px 10px; border-radius: 8px;
+  }
+  .rain[hidden] { display: none; }
+  .rain.wet { color: var(--rain-wet-ink); background: var(--rain-wet-bg); font-weight: 700; }
+  .rain.storm { color: var(--alert-ink); font-weight: 750; animation: stormPulse 1.15s ease-in-out infinite; }
+  @keyframes stormPulse {
+    0%, 100% { background-color: color-mix(in srgb, var(--alert) 16%, transparent); }
+    50%      { background-color: color-mix(in srgb, var(--alert) 36%, transparent); }
+  }
+  @media (prefers-reduced-motion: reduce) { .rain.storm { animation: none; background-color: color-mix(in srgb, var(--alert) 26%, transparent); } }
+
+  /* light/dark toggle, big and reachable at the very bottom */
+  .theme-toggle {
+    margin: 4px 2px calc(2px + env(safe-area-inset-bottom));
+    padding: 15px; border-radius: 12px; border: 1px solid var(--ring);
+    background: var(--surface); color: var(--ink);
+    font: inherit; font-size: 16px; font-weight: 650; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; gap: 9px;
+  }
+  .theme-toggle:focus-visible { outline: 2px solid var(--rain); outline-offset: 1px; }
 
   .notice {
     background: var(--surface);
@@ -239,32 +254,6 @@
   .loc-myloc[hidden] { display: none; }
   .loc-myloc:focus-visible { outline: 2px solid var(--rain); outline-offset: -2px; border-radius: 6px; }
 
-  .now {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    background: var(--surface);
-    border: 1px solid var(--ring);
-    border-radius: 10px;
-    padding: 8px 12px;
-  }
-  .now .t {
-    font-size: clamp(28px, 8.5vw, 38px);
-    font-weight: 700;
-    line-height: 1;
-    font-variant-numeric: tabular-nums;
-    color: var(--temp);
-  }
-  .now .stack { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
-  .rain-status { font-size: 14px; font-weight: 600; line-height: 1.3; }
-  .rain-status .when { color: var(--rain); }
-  .wind-now {
-    display: flex; align-items: center; gap: 6px;
-    font-size: 13px; color: var(--ink-2);
-    font-variant-numeric: tabular-nums;
-  }
-  .wind-now svg { flex: none; }
-
   .card {
     background: var(--surface);
     border: 1px solid var(--ring);
@@ -276,17 +265,17 @@
   }
   .card h2 {
     margin: 0 0 2px;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--muted);
+    font-size: 13px;
+    font-weight: 650;
+    letter-spacing: 0;
+    text-transform: none;
+    color: var(--ink);
     display: flex;
     justify-content: space-between;
     align-items: baseline;
     gap: 8px;
   }
-  .card h2 .note { font-weight: 500; letter-spacing: 0; text-transform: none; }
+  .card h2 .note { font-weight: 500; font-size: 11px; letter-spacing: 0; text-transform: none; color: var(--muted); }
 
   .bars {
     position: relative;
@@ -295,7 +284,7 @@
     align-items: flex-end;
     gap: 2px;
     border-bottom: 1px solid var(--baseline);
-    margin-top: 14px;
+    margin-top: 18px;
   }
   .app.nomap .bars { height: clamp(88px, 15vh, 160px); }
   .bars .gl {
@@ -340,8 +329,8 @@
   .arrows svg { display: block; }
 
   .bar .v-label {
-    position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
-    font-size: 10px; color: var(--ink-2); font-variant-numeric: tabular-nums;
+    position: absolute; top: -16px; left: 50%; transform: translateX(-50%);
+    font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
   .now-line {
@@ -350,13 +339,28 @@
   }
   .xaxis {
     position: relative;
-    height: 14px;
-    font-size: 10px;
+    height: 16px;
+    font-size: 12px;
     color: var(--muted);
     font-variant-numeric: tabular-nums;
   }
   .xaxis span { position: absolute; transform: translateX(-50%); top: 2px; }
-  .xaxis .nowlbl { color: var(--ink-2); font-weight: 600; }
+  .xaxis .nowlbl { color: var(--ink); font-weight: 700; }
+
+  /* UV index bar chart (below the radar) */
+  .uvbars {
+    position: relative;
+    height: clamp(70px, 11vh, 120px);
+    display: flex; align-items: flex-end; gap: 2px;
+    border-bottom: 1px solid var(--baseline);
+    margin-top: 32px;
+  }
+  .uvbars .ub { flex: 1; border-radius: 3px 3px 0 0; position: relative; min-height: 2px; }
+  .uvbars .ub.past { opacity: 0.5; }
+  .uvbars .ub .n { position: absolute; top: -16px; left: 50%; transform: translateX(-50%); font-size: 12px; font-weight: 650; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .uvbars .ub.now .n { color: var(--ink); font-weight: 700; }
+  .uvbars .ub.now::after { content: "now"; position: absolute; top: -31px; left: 50%; transform: translateX(-50%); font-size: 12px; font-weight: 700; color: var(--ink); white-space: nowrap; }
+  .uvxaxis span:first-child { transform: none; }
 
   .radar-card { flex: none; padding-bottom: 8px; }
   .app.nomap .radar-card { display: none; }
@@ -490,12 +494,16 @@
 <body>
 <div class="app" id="app">
   <header>
-    <div class="clock" id="clock">--:--<span class="sec">:--</span></div>
-    <button class="theme-btn" id="themeBtn" type="button" aria-label="Toggle light and dark mode">◐</button>
     <button class="place" id="placeBtn" type="button" aria-expanded="false" aria-controls="locPanel" title="Change location">
-      <span class="name"><span class="pin" id="placePin" hidden>⌖</span><span class="nm" id="placeName">&nbsp;</span><span class="chev" aria-hidden="true">▾</span></span>
-      <span class="coords" id="placeCoords">&nbsp;</span>
+      <span class="nm" id="placeName">&nbsp;</span><span class="medot" id="placeDot" hidden aria-hidden="true"></span>
     </button>
+    <span class="metrics" id="nowStrip" hidden>
+      <span class="temp" id="heroTemp">–</span>
+      <span class="wind" id="windNow">
+        <svg id="windNowArrow" width="15" height="15" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 13 L7 3.4 M3.4 7 L7 2 L10.6 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><span id="windNowText"></span><small>km/h</small>
+      </span>
+      <span class="uvpill" id="uvPill" hidden></span>
+    </span>
   </header>
 
   <div class="loc-panel" id="locPanel" hidden>
@@ -505,7 +513,7 @@
         <input id="locInput" type="search" placeholder="Search a place…" autocomplete="off" enterkeyhint="search" aria-label="Search a place">
       </div>
     </form>
-    <div class="loc-note"><span aria-hidden="true">ⓘ</span><span>Weather data is <b>GeoSphere Austria</b> — results only work for Austria and its close surroundings.</span></div>
+    <div class="loc-note"><span aria-hidden="true">ⓘ</span><span>Weather data is <b>GeoSphere Austria</b>. Results only work for Austria and its close surroundings.</span></div>
     <div class="loc-results" id="locResults"></div>
     <button class="loc-myloc" id="myLocBtn" type="button" hidden>
       <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true"><circle cx="7.5" cy="7.5" r="4.4" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="7.5" cy="7.5" r="1.6" fill="currentColor"/><path d="M7.5 0.7 V2.9 M7.5 12.1 V14.3 M0.7 7.5 H2.9 M12.1 7.5 H14.3" stroke="currentColor" stroke-width="1.5"/></svg>
@@ -515,40 +523,29 @@
 
   <div class="notice" id="notice"><span id="noticeText">Locating you…</span><button id="retryBtn" type="button" hidden>Retry</button></div>
 
-  <div class="now" id="nowStrip" hidden>
-    <div class="t" id="heroTemp">–</div>
-    <div class="stack">
-      <div class="rain-status" id="rainStatus"></div>
-      <div class="wind-now">
-        <svg id="windNowArrow" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-          <path d="M7 13 L7 3.4 M3.4 7 L7 2 L10.6 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
-        <span id="windNowText"></span>
-      </div>
-    </div>
-  </div>
+  <div class="rain" id="rainStatus" hidden></div>
 
   <section class="card" id="rainCard" aria-label="Rain, recent and next 3 hours" hidden>
-    <h2>Rain · mm / 15 min</h2>
+    <h2>Rain</h2>
     <div class="bars" id="rainBars"></div>
     <div class="xaxis" id="rainAxis"></div>
   </section>
 
   <section class="card" id="tempCard" aria-label="Temperature, recent and next 3 hours" hidden>
-    <h2>Temperature · °C</h2>
+    <h2>Temp</h2>
     <div class="bars tbars" id="tempBars"></div>
     <div class="xaxis" id="tempAxis"></div>
   </section>
 
   <section class="card" id="windCard" aria-label="Wind, recent and next 3 hours" hidden>
-    <h2>Wind · km/h <span class="note">arrow = blows toward</span></h2>
+    <h2>Wind <span class="note">arrow = blows toward</span></h2>
     <div class="arrows" id="windArrows"></div>
     <div class="bars wbars" id="windBars"></div>
     <div class="xaxis" id="windAxis"></div>
   </section>
 
   <section class="card radar-card" id="radarCard" aria-label="Rain radar" hidden>
-    <h2>Radar · 40 × 40 km <span class="note">1 km grid</span></h2>
+    <h2>Radar</h2>
     <div class="radar-outer">
     <div class="radar-frame mapped" id="radarFrame">
       <canvas id="basemap" aria-hidden="true"></canvas>
@@ -569,11 +566,21 @@
     </div>
   </section>
 
+  <section class="card" id="uvCard" aria-label="UV index today" hidden>
+    <h2>UV</h2>
+    <div class="uvbars" id="uvBars"></div>
+    <div class="xaxis uvxaxis" id="uvAxis"></div>
+  </section>
+
   <footer>
-    Data <a href="https://www.geosphere.at/" rel="noopener">© GeoSphere Austria</a> (CC BY 4.0)
+    Data <a href="https://www.geosphere.at/" rel="noopener">© GeoSphere Austria</a> (CC BY 4.0) · UV <a href="https://open-meteo.com/" rel="noopener">© Open-Meteo</a>
     <span id="runInfo"></span>
     <span class="attrib" id="mapAttrib">Map © OpenStreetMap · © CARTO</span>
   </footer>
+
+  <button class="theme-toggle" id="themeBtn" type="button" aria-label="Switch between light and dark">
+    <span aria-hidden="true">◐</span><span id="themeBtnLabel">Dark mode</span>
+  </button>
 </div>
 <div class="tip" id="tip"></div>
 
@@ -586,10 +593,12 @@
   var GRID_API = "https://dataset.api.hub.geosphere.at/v1/grid/forecast/nowcast-v1-15min-1km";
   var GEOCODER = "https://api.bigdatacloud.net/data/reverse-geocode-client";
   var TILE_HOST = "https://basemaps.cartocdn.com/rastertiles/";
+  var UV_API = "https://api.open-meteo.com/v1/forecast";
   var PARAMS = "rr,t2m,ff,dd,fx";
   var STEP_MIN = 15;
   var WIN_M = 40000;                    /* radar window width, metres */
   var WET = 0.1;                        /* mm / 15 min counted as rain */
+  var STORM = 4;                        /* mm / 15 min: heavy enough to raise the storm alert */
 
   var qs = new URLSearchParams(location.search);
   var NOMAP = qs.get("nomap") === "1";
@@ -608,28 +617,21 @@
       }
     });
   }
+  function syncThemeLabel() { $("themeBtnLabel").textContent = isDark() ? "Light mode" : "Dark mode"; }
   try { applyTheme(localStorage.getItem("rw-theme") || null); } catch (e) {}
   $("themeBtn").addEventListener("click", function () {
     var next = isDark() ? "light" : "dark";
     try { localStorage.setItem("rw-theme", next); } catch (e) {}
     applyTheme(next);
+    syncThemeLabel();
     drawRadarFrame();
     if (radar.mapped && radar.geo) drawMaps();
     flightsRedraw();
   });
-
-  /* ================= clock ================= */
-  var clockEl = $("clock");
-  function pad(n) { return String(n).padStart(2, "0"); }
-  function tickClock() {
-    var d = new Date();
-    clockEl.innerHTML = pad(d.getHours()) + ":" + pad(d.getMinutes()) +
-      '<span class="sec">:' + pad(d.getSeconds()) + "</span>";
-  }
-  tickClock();
-  setInterval(tickClock, 1000);
+  syncThemeLabel();
 
   /* ================= helpers ================= */
+  function pad(n) { return String(n).padStart(2, "0"); }
   function parseTs(s) {
     s = s.replace("+00:00", "Z");
     if (/T\d\d:\d\dZ?$/.test(s)) s = s.replace(/(T\d\d:\d\d)(Z?)$/, "$1:00$2");
@@ -768,7 +770,7 @@
       if (fin(fut[k]) && fut[k] >= WET) { start = k; break; }
     }
     if (start === -1) return ["Dry for now.", "No rain expected in the next 3 hours."];
-    var kind = fut[start] >= 1 ? "Rain" : "Light rain";
+    var kind = fut[start] >= STORM ? "Heavy rain" : fut[start] >= 1 ? "Rain" : "Light rain";
     var m = minsUntil(start);
     return ["Dry for now.", kind + (m <= 90 ? " expected in " + m + " min." : " expected around " + hhmm(futTimes[start]) + ".")];
   }
@@ -776,12 +778,91 @@
   var COMPASS = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
   function compass(deg) { return COMPASS[Math.round(deg / 22.5) % 16]; }
 
+  /* dry / wet / storm — storm when heavy rain is anywhere in the forecast window */
+  function rainState(fut) {
+    var peak = -Infinity, wet = false;
+    for (var i = 0; i < fut.length; i++) {
+      if (fin(fut[i])) { if (fut[i] > peak) peak = fut[i]; if (fut[i] >= WET) wet = true; }
+    }
+    if (peak >= STORM) return "storm";
+    return wet ? "wet" : "dry";
+  }
+
+  /* ================= UV index (Open-Meteo, keyless) ================= */
+  var UV_BANDS = [
+    { max: 2, tok: "--uv-low", label: "Low" },
+    { max: 5, tok: "--uv-mod", label: "Moderate" },
+    { max: 7, tok: "--uv-high", label: "High" },
+    { max: 10, tok: "--uv-vhigh", label: "Very high" },
+    { max: 99, tok: "--uv-ext", label: "Extreme" }
+  ];
+  function uvBand(v) { for (var i = 0; i < UV_BANDS.length; i++) if (v <= UV_BANDS[i].max) return UV_BANDS[i]; return UV_BANDS[UV_BANDS.length - 1]; }
+  function uvColor(v) { return getComputedStyle(document.documentElement).getPropertyValue(uvBand(v).tok).trim(); }
+  function uvTextOn(hex) {
+    var h = hex.replace("#", ""); if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+    var r = parseInt(h.substr(0,2),16), g = parseInt(h.substr(2,2),16), b = parseInt(h.substr(4,2),16);
+    return (0.299*r + 0.587*g + 0.114*b) > 150 ? "#1a1a1a" : "#fff";   /* dark text on yellow, white elsewhere */
+  }
+  function setUvPill(v) {
+    var pill = $("uvPill"), col = uvColor(v);
+    pill.hidden = false;
+    pill.style.background = col;
+    pill.style.color = uvTextOn(col);
+    pill.innerHTML = '<span class="uvk">UV</span> ' + v;
+  }
+  function buildUvGraph(hourly) {
+    var times = hourly.time, vals = hourly.uv_index;
+    if (!times || !vals || !vals.length) return;
+    var nowMs = Date.now(), nowIdx = 0, i;
+    for (i = 0; i < times.length; i++) { if (new Date(times[i]).getTime() <= nowMs) nowIdx = i; }
+    /* show the daylight window (UV > 0), padded an hour each side */
+    var first = -1, last = -1;
+    for (i = 0; i < vals.length; i++) { if (fin(vals[i]) && vals[i] > 0) { if (first < 0) first = i; last = i; } }
+    if (first < 0) { first = 8; last = 18; }
+    var start = Math.max(0, first - 1), end = Math.min(vals.length - 1, last + 1);
+    var maxV = 0;
+    for (i = start; i <= end; i++) if (fin(vals[i]) && vals[i] > maxV) maxV = vals[i];
+    if (maxV <= 0) maxV = 1;
+    var el = $("uvBars"); clearEl(el);
+    for (i = start; i <= end; i++) {
+      var v = fin(vals[i]) ? vals[i] : 0, r = Math.round(v);
+      var b = document.createElement("div");
+      b.className = "ub" + (i < nowIdx ? " past" : "") + (i === nowIdx ? " now" : "");
+      b.style.height = Math.max(2, v / maxV * 100) + "%";
+      b.style.background = uvColor(r);
+      if (i === nowIdx || i % 2 === 0) {
+        var n = document.createElement("span"); n.className = "n"; n.textContent = r; b.appendChild(n);
+      }
+      el.appendChild(b);
+    }
+    var ax = $("uvAxis"); clearEl(ax);
+    var span = end - start;
+    [0, Math.round(span / 3), Math.round(span * 2 / 3), span].forEach(function (off, k) {
+      var s = document.createElement("span");
+      if (k === 0) { s.style.left = "0"; s.style.transform = "none"; }
+      else if (k === 3) { s.style.right = "0"; s.style.left = "auto"; s.style.transform = "none"; }
+      else { s.style.left = (span ? off / span * 100 : 0) + "%"; }
+      s.textContent = pad(new Date(times[start + off]).getHours()) + ":00";
+      ax.appendChild(s);
+    });
+    $("uvCard").hidden = false;
+  }
+  function initUV(lat, lon) {
+    fetchJSON(UV_API + "?latitude=" + lat.toFixed(4) + "&longitude=" + lon.toFixed(4) +
+      "&hourly=uv_index&current=uv_index&timezone=auto&forecast_days=1", 1)
+      .then(function (d) {
+        if (!d) return;
+        if (d.hourly) buildUvGraph(d.hourly);
+        var cur = d.current && d.current.uv_index;
+        if (!fin(cur) && d.hourly && d.hourly.uv_index) cur = d.hourly.uv_index[new Date().getHours()];
+        if (fin(cur)) setUvPill(Math.max(0, Math.round(cur)));
+      }).catch(function () {});
+  }
+
   /* ================= place name ================= */
   function loadPlaceName(lat, lon, fixedName) {
-    $("placeCoords").textContent = Math.abs(lat).toFixed(3) + "° " + (lat >= 0 ? "N" : "S") +
-      " · " + Math.abs(lon).toFixed(3) + "° " + (lon >= 0 ? "E" : "W");
-    /* searched location: we already know its name — pin it, skip the geocoder */
-    $("placePin").hidden = !fixedName;
+    /* blue dot marks a geolocated spot; a searched place has a known name and no dot */
+    $("placeDot").hidden = !!fixedName;
     if (fixedName) { $("placeName").textContent = fixedName; return; }
     var key = "rw-place:" + lat.toFixed(2) + "," + lon.toFixed(2);
     try {
@@ -846,7 +927,7 @@
     fetchJSON(GEOSEARCH + "?q=" + encodeURIComponent(q) + "&limit=6&lang=en" +
       "&lat=" + bias.lat.toFixed(3) + "&lon=" + bias.lon.toFixed(3), 1)
       .then(showLocResults)
-      .catch(function () { locMsg("Search failed — check your connection and try again."); });
+      .catch(function () { locMsg("Search failed. Check your connection and try again."); });
   });
 
   function showLocResults(d) {
@@ -930,31 +1011,31 @@
     var dd = merge(d5 ? d5.dd : [], d0.dd);
 
     if (!d0.t2m.some(fin)) {
-      showNotice("No nowcast data here — GeoSphere covers Austria and its close surroundings.", true);
+      showNotice("No nowcast data here. GeoSphere covers Austria and its close surroundings.", true);
       return null;
     }
     notice.hidden = true;
 
-    /* hero + status + wind now */
+    /* top line: temperature + wind (arrow only); UV pill fills in when Open-Meteo answers */
     $("nowStrip").hidden = false;
     var curT = d0.t2m[0];
-    $("heroTemp").textContent = fin(curT) ? curT.toFixed(1) + "°C" : "–";
-    var st = rainStatement(d0.rr, times, pastN);
-    $("rainStatus").innerHTML = "";
-    $("rainStatus").appendChild(document.createTextNode(st[0] + " "));
-    var when = document.createElement("span");
-    when.className = "when";
-    when.textContent = st[1];
-    $("rainStatus").appendChild(when);
-    var curFF = d0.ff[0], curFX = d0.fx[0], curDD = d0.dd[0];
-    $("windNowText").textContent = (fin(curDD) ? compass(curDD) + " " : "") +
-      (fin(curFF) ? Math.round(curFF * 3.6) + " km/h" : "–") +
-      (fin(curFX) ? " · gusts " + Math.round(curFX * 3.6) : "");
+    $("heroTemp").textContent = fin(curT) ? Math.round(curT) + "°" : "–";
+    var curFF = d0.ff[0], curDD = d0.dd[0];
+    $("windNowText").textContent = fin(curFF) ? Math.round(curFF * 3.6) : "–";
+    $("windNow").hidden = !fin(curFF);
     if (fin(curDD)) $("windNowArrow").style.transform = "rotate(" + ((curDD + 180) % 360) + "deg)";
+
+    /* second line: rain outlook, coloured grey (dry) / blue (rain) / amber (storm) */
+    var st = rainStatement(d0.rr, times, pastN);
+    var state = rainState(d0.rr);
+    var rl = $("rainStatus");
+    rl.hidden = false;
+    rl.className = "rain" + (state === "dry" ? "" : " " + state);
+    rl.textContent = st[0] + " " + st[1];
 
     /* charts */
     $("rainCard").hidden = $("tempCard").hidden = $("windCard").hidden = false;
-    buildBars($("rainBars"), rr, times, pastN, { baselined: true, unit: "mm", decimals: 1, floor: 1.5, labelMax: true });
+    buildBars($("rainBars"), rr, times, pastN, { baselined: true, unit: "mm", decimals: 1, floor: 2.5, labelMax: true });
     buildAxis($("rainAxis"), times, pastN);
     buildBars($("tempBars"), t2m, times, pastN, { baselined: false, unit: "°C", decimals: 0, labelMax: true, labelMin: true });
     buildAxis($("tempAxis"), times, pastN);
@@ -1493,11 +1574,11 @@
       var vienna = function (msg) {
         resolve({ lat: 48.2082, lon: 16.3719, fallback: msg });
       };
-      if (!navigator.geolocation) return vienna("No geolocation here — showing Vienna.");
+      if (!navigator.geolocation) return vienna("No geolocation here. Showing Vienna.");
       navigator.geolocation.getCurrentPosition(
         function (pos) { resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude }); },
         function (err) {
-          vienna(err.code === 1 ? "Location denied — showing Vienna." : "No location fix — showing Vienna.");
+          vienna(err.code === 1 ? "Location denied. Showing Vienna." : "No location fix. Showing Vienna.");
         },
         { timeout: 8000, maximumAge: 120000 });
     });
@@ -1527,6 +1608,7 @@
       var pos = res[2];
       var ok = renderPoint(d0, d5);
       if (ok && pos.fallback) showNotice(pos.fallback, true);
+      if (ok) initUV(pos.lat, pos.lon);
       if (ok && !NOMAP) {
         radar.pos = pos;
         initRadar(pos.lat, pos.lon, d0.times);
