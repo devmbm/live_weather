@@ -393,7 +393,7 @@
     pointer-events: none;
   }
   .frame-label {
-    position: absolute; top: 7px; right: 8px;
+    position: absolute; bottom: 7px; right: 8px;
     font-size: clamp(18px, 5.5vw, 24px);
     font-weight: 700;
     font-variant-numeric: tabular-nums;
@@ -421,50 +421,46 @@
   .scalebar b { display: inline-block; width: 42px; height: 2px; background: var(--ink-2); vertical-align: middle; margin-right: 5px; }
 
   .controls {
-    display: flex; gap: 6px; margin-top: 7px; align-items: stretch;
+    display: flex; gap: 8px; margin-top: 8px; align-items: stretch;
   }
   .ctl {
+    flex: 1;                        /* buttons now share the whole row */
     border: 1px solid var(--ring);
     background: none;
     color: var(--ink-2);
     font: inherit;
-    font-size: 15px;
-    padding: 9px 16px 10px;
-    border-radius: 8px;
+    font-size: 17px;
+    font-weight: 600;
+    padding: 16px 10px;
+    border-radius: 12px;
     cursor: pointer;
-    flex: none;
   }
   .ctl[aria-pressed="true"] {
     background: var(--chip-on);
     color: var(--chip-on-ink);
     border-color: var(--chip-on);
-    font-weight: 600;
   }
   .ctl:focus-visible, .tick:focus-visible { outline: 2px solid var(--rain); outline-offset: 1px; }
-  .ticks {
-    flex: 1;
-    display: flex;
-    gap: 2px;
-    align-items: stretch;
+  /* radar loop position, overlaid on the map like Instagram stories */
+  .radar-frame .ticks {
+    position: absolute; top: 7px; left: 50%; transform: translateX(-50%);
+    width: 55%; max-width: 220px;
+    display: flex; gap: 3px; z-index: 3;
   }
   .tick {
-    flex: 1;
-    border: 0;
-    background: none;
-    padding: 0;
-    cursor: pointer;
-    position: relative;
+    flex: 1; height: 14px;          /* tall, transparent tap target; bar drawn via ::after */
+    border: 0; background: none; padding: 0;
+    cursor: pointer; position: relative;
   }
   .tick::after {
     content: "";
-    position: absolute; left: 1px; right: 1px; top: 50%;
-    height: 4px; transform: translateY(-50%);
+    position: absolute; left: 0; right: 0; top: 50%;
+    height: 3px; transform: translateY(-50%);
     border-radius: 2px;
-    background: var(--grid);
+    background: color-mix(in srgb, var(--ink) 42%, transparent);   /* dim, and dark on the light map / light on the dark map */
+    box-shadow: 0 0 2px var(--page);                               /* contrast halo flips with the theme */
   }
-  .tick[aria-current="true"]::after { background: var(--rain); height: 8px; }
-  .tick.hour::after { height: 6px; background: var(--baseline); }
-  .tick.hour[aria-current="true"]::after { background: var(--rain); height: 8px; }
+  .tick[aria-current="true"]::after { background: var(--ink); }    /* solid = current frame */
 
   footer {
     font-size: 10px;
@@ -563,10 +559,10 @@
       <div class="frame-label" id="frameLabel"></div>
       <div class="radar-note" id="radarNote">loading radar…</div>
       <div class="scalebar" id="scalebar" hidden><b></b>10 km</div>
+      <div class="ticks" id="ticks" role="group" aria-label="Radar time step"></div>
     </div>
     </div>
     <div class="controls">
-      <div class="ticks" id="ticks" role="group" aria-label="Radar time step"></div>
       <button class="ctl" id="rangeBtn" type="button" aria-pressed="false" aria-label="Extend loop to 3 hours">3 h</button>
       <button class="ctl" id="mapBtn" type="button" aria-pressed="true" aria-label="Hide base map">Map</button>
       <button class="ctl" id="fltBtn" type="button" aria-pressed="false" aria-label="Show live flights">✈</button>
@@ -1265,10 +1261,8 @@
 
   /* ================= flights (opt-in: zero requests until the ✈ button) ================= */
   /* flights render straight onto the radar frame; the rain overlay + loop pause while on */
-  var flights = { on: false, timer: null, hist: {}, planes: [], routes: {} };
+  var flights = { on: false, timer: null, hist: {}, planes: [] };
   var FLT_REFRESH = 15000;
-  var ROUTES_API = "https://api.adsb.lol/api/0/routeset";   /* callsign → IATA route, keyless */
-  var RT_PENDING = "pending", RT_NONE = "none";  /* flights.routes[cs] states besides a real route */
   var AIRLINES = {
     AUA: "Austrian", DLH: "Lufthansa", RYR: "Ryanair", WZZ: "Wizz Air", WMT: "Wizz Air",
     EZY: "easyJet", EJU: "easyJet", BAW: "British Airways", AFR: "Air France", KLM: "KLM",
@@ -1367,13 +1361,11 @@
     vis.forEach(function (a) {
       var x = fx(a.lon), y = fy(a.lat);
       var cs = String(a.flight || a.r || a.hex || "").trim();
-      var name = airlineOf(cs) || cs;             /* airline in Sentence Case, else the callsign */
+      var al = airlineOf(cs);                      /* Sentence-Case airline name, or null */
+      var name = al || cs;                         /* just the callsign when the airline is unknown */
       if (!name) return;
-      var lines = [{ txt: name, font: "700 15px system-ui, sans-serif", size: 15 }];
-      var route = flights.routes[cs];             /* "VIE-STR" | RT_PENDING | RT_NONE | undefined */
-      var routeTxt = (route && route !== RT_PENDING && route !== RT_NONE) ? route
-                   : (route === RT_NONE ? null : "Fetching…");   /* show placeholder until it loads */
-      if (routeTxt) lines.push({ txt: routeTxt, font: "600 15px system-ui, sans-serif", size: 15 });
+      var lines = [{ txt: name, font: "700 13px system-ui, sans-serif", size: 13 }];
+      if (al && cs && al !== cs) lines.push({ txt: cs, font: "600 11px system-ui, sans-serif", size: 11 });
       var dim = measureLabel(c, lines);
       labels.push({ x: x, top: y + 12, w: dim.w, h: dim.h, lines: lines });
     });
@@ -1445,41 +1437,8 @@
         });
         flights.planes = list;
         drawFlights();
-        fetchRoutes(list);
         document.body.setAttribute("data-state-flights", "ok");
       }).catch(function () {});
-  }
-
-  /* one batched lookup, only for callsigns we've never asked about — every route is fetched
-     exactly once and then reused on all later 15 s ticks, so redraws cost no bandwidth */
-  function fetchRoutes(list) {
-    var need = [];
-    list.forEach(function (a) {
-      var cs = String(a.flight || "").trim();
-      if (cs && !(cs in flights.routes)) {
-        need.push({ callsign: cs, lat: a.lat, lng: a.lon });
-        flights.routes[cs] = RT_PENDING;            /* marks it requested → shows "Fetching…" */
-      }
-    });
-    if (!need.length) return;
-    fetch(ROUTES_API, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ planes: need })
-    }).then(function (r) { return r.ok ? r.json() : null; }).then(function (arr) {
-      (arr || []).forEach(function (row) {
-        if (!row || !row.callsign) return;
-        var codes = row._airport_codes_iata;
-        flights.routes[row.callsign] =
-          (codes && codes !== "unknown" && codes.indexOf("-") !== -1) ? codes : RT_NONE;
-      });
-      /* anything asked-for but absent from the reply has no known route */
-      need.forEach(function (p) { if (flights.routes[p.callsign] === RT_PENDING) flights.routes[p.callsign] = RT_NONE; });
-      if (flights.on) drawFlights();
-    }).catch(function () {
-      /* failed lookup: forget it so a later tick can retry (don't strand it on "Fetching…") */
-      need.forEach(function (p) { if (flights.routes[p.callsign] === RT_PENDING) delete flights.routes[p.callsign]; });
-    });
   }
 
   function clearPlanes() {

@@ -54,8 +54,7 @@ self.addEventListener("fetch", function (e) {
   if (url.hostname.indexOf("geosphere.at") !== -1 ||
       url.hostname.indexOf("bigdatacloud.net") !== -1 ||
       url.hostname.indexOf("komoot.io") !== -1 ||
-      url.hostname.indexOf("airplanes.live") !== -1 ||
-      url.hostname.indexOf("adsb.lol") !== -1) return;
+      url.hostname.indexOf("airplanes.live") !== -1) return;
 
   /* map tiles: cache-first, capped */
   if (url.hostname === "basemaps.cartocdn.com") {
