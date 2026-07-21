@@ -651,7 +651,8 @@
   var UV_API = "https://api.open-meteo.com/v1/forecast";
   var PARAMS = "rr,t2m,ff,dd,fx";
   var STEP_MIN = 15;
-  var WIN_M = 40000;                    /* radar window width, metres */
+  var WIN_M = 40000;                    /* rain radar window width, metres (also sets the grid request) */
+  var PLANE_WIN_M = 30000;              /* fullscreen plane view is tighter: 30 km across, ~60 km tall */
   var WET = 0.1;                        /* mm / 15 min counted as rain */
   var STORM = 4;                        /* mm / 15 min: heavy enough to raise the storm alert */
 
@@ -1142,8 +1143,8 @@
   }
 
   function radarGeometry(lat, lon) {
-    var W, H;
-    if (radar.frame.classList.contains("full")) {
+    var W, H, full = radar.frame.classList.contains("full");
+    if (full) {
       /* fullscreen plane view: still 40 km across the width, the height just
          follows the screen (≈80 km on a tall phone) — the map is never stretched */
       radar.frame.style.width = radar.frame.style.height = "";
@@ -1161,7 +1162,8 @@
     }
     if (!W || !H) return null;
     var dpr = Math.min(2, window.devicePixelRatio || 1);
-    var mpp = WIN_M / W;                                    /* metres per css px */
+    var win = full ? PLANE_WIN_M : WIN_M;                   /* metres across the width */
+    var mpp = win / W;                                      /* metres per css px */
     var latRes = 156543.03392 * Math.cos(lat * Math.PI / 180);
     var z = Math.max(7, Math.min(12, Math.round(Math.log2(latRes / mpp))));
     var tileMpp = latRes / Math.pow(2, z);
@@ -1171,7 +1173,7 @@
       c.width = Math.round(W * dpr); c.height = Math.round(H * dpr);
     });
     $("scalebar").hidden = false;
-    $("scalebar").querySelector("b").style.width = (W / 4) + "px";
+    $("scalebar").querySelector("b").style.width = (W * 10000 / win) + "px";   /* the bar is always 10 km */
     return {
       W: W, H: H, dpr: dpr, z: z, s: s, cx: cx, cy: cy,
       tileMpp: tileMpp,
@@ -1603,6 +1605,7 @@
     /* build every label, then push overlapping ones downward so they stay readable */
     var labels = [];
     vis.forEach(function (a) {
+      if (a.alt_baro === "ground") return;      /* taxiing traffic stays unlabelled — an airport is crowded enough */
       var x = fx(a._alon), y = fy(a._alat);
       var cs = String(a.flight || a.r || a.hex || "").trim();
       var al = airlineOf(cs);                      /* Sentence-Case airline name, or null */
@@ -1679,11 +1682,11 @@
     fetchJSON("https://api.airplanes.live/v2/point/" + p.lat.toFixed(3) + "/" + p.lon.toFixed(3) + "/39", 1)
       .then(function (d) {
         /* aircraft on the ground are kept — they show as taxiing traffic.
-           the box is trimmed to what the 40 km-wide fullscreen view can actually
+           the box is trimmed to what the 30 km-wide fullscreen view can actually
            show (plus margin), so fewer aircraft also means fewer route lookups */
         var list = ((d && d.ac) || []).filter(function (a) {
           return fin(a.lat) && fin(a.lon) &&
-            Math.abs(a.lat - p.lat) < 0.45 && Math.abs(a.lon - p.lon) < 0.35;
+            Math.abs(a.lat - p.lat) < 0.35 && Math.abs(a.lon - p.lon) < 0.26;
         }).slice(0, 40);
         list.forEach(function (a) {
           var h = flights.hist[a.hex] = flights.hist[a.hex] || [];
