@@ -38,6 +38,8 @@
     --rain-wet-bg: transparent; --rain-wet-ink: var(--rain);
     --alert: #e8820e; --alert-ink: #8a4b00;
     --uv-low: #4eb400; --uv-mod: #f7e400; --uv-high: #f85900; --uv-vhigh: #d8001d; --uv-ext: #8a4fc8;
+    /* header UV text colours — darker in light mode so the value stays legible on the near-white page */
+    --uv-low-ink: #2e7d00; --uv-mod-ink: #a67b00; --uv-high-ink: #d24700; --uv-vhigh-ink: #cc0018; --uv-ext-ink: #6f3fb0;
   }
   @media (prefers-color-scheme: dark) {
     :root:where(:not([data-theme="light"])) {
@@ -62,6 +64,7 @@
       --rain-dry-bg: transparent; --rain-dry-ink: #b7b5ad;
       --rain-wet-bg: #9ac5ff; --rain-wet-ink: #0e4699;
       --alert: #fbbf24; --alert-ink: #fcd34d;
+      --uv-low-ink: #4eb400; --uv-mod-ink: #f7e400; --uv-high-ink: #f85900; --uv-vhigh-ink: #d8001d; --uv-ext-ink: #8a4fc8;
     }
   }
   :root[data-theme="dark"] {
@@ -86,6 +89,7 @@
     --rain-dry-bg: transparent; --rain-dry-ink: #b7b5ad;
     --rain-wet-bg: #9ac5ff; --rain-wet-ink: #0e4699;
     --alert: #fbbf24; --alert-ink: #fcd34d;
+    --uv-low-ink: #4eb400; --uv-mod-ink: #f7e400; --uv-high-ink: #f85900; --uv-vhigh-ink: #d8001d; --uv-ext-ink: #8a4fc8;
   }
 
   * { box-sizing: border-box; }
@@ -155,6 +159,9 @@
   .uvpill { display: inline-flex; align-items: baseline; gap: 3px; font-weight: 400; font-size: 15px; line-height: 1; letter-spacing: -0.01em; opacity: 0.82; font-variant-numeric: tabular-nums; }
   .uvpill[hidden] { display: none; }
   .uvpill .uvk { font-size: inherit; font-weight: 400; letter-spacing: -0.01em; }
+  /* critical UV (High and up): bold + full opacity to flag the risk */
+  .uvpill.crit { font-weight: 700; opacity: 1; }
+  .uvpill.crit .uvk { font-weight: 700; }
 
   /* second line: plain-English rain outlook, coloured by state */
   /* the rain outlook closes the "header block"; the extra margin-bottom sets
@@ -815,16 +822,19 @@
   ];
   function uvBand(v) { for (var i = 0; i < UV_BANDS.length; i++) if (v <= UV_BANDS[i].max) return UV_BANDS[i]; return UV_BANDS[UV_BANDS.length - 1]; }
   function uvColor(v) { return getComputedStyle(document.documentElement).getPropertyValue(uvBand(v).tok).trim(); }
+  /* header text colour: theme-aware "ink" variant (darker in light mode); the bars keep uvColor */
+  function uvInk(v) { return getComputedStyle(document.documentElement).getPropertyValue(uvBand(v).tok + "-ink").trim(); }
   function uvTextOn(hex) {
     var h = hex.replace("#", ""); if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
     var r = parseInt(h.substr(0,2),16), g = parseInt(h.substr(2,2),16), b = parseInt(h.substr(4,2),16);
     return (0.299*r + 0.587*g + 0.114*b) > 150 ? "#1a1a1a" : "#fff";   /* dark text on yellow, white elsewhere */
   }
   function setUvPill(v) {
-    var pill = $("uvPill"), col = uvColor(v);
+    var pill = $("uvPill"), col = uvInk(v);
     pill.hidden = false;
     pill.style.background = "none";
     pill.style.color = col;                 /* label + value both in the band colour */
+    pill.classList.toggle("crit", v >= 6);  /* High and up: bold + full opacity */
     pill.innerHTML = '<span class="uvk">UV</span>' + v;
   }
   function buildUvGraph(hourly) {
@@ -1359,7 +1369,7 @@
 
   /* ================= flights (opt-in: zero requests until the ✈ button) ================= */
   /* flights render straight onto the radar frame; the rain overlay + loop pause while on */
-  var flights = { on: false, timer: null, hist: {}, planes: [] };
+  var flights = { on: false, timer: null, hist: {}, planes: [], raf: null, last: 0 };
   var FLT_REFRESH = 15000;
   var AIRLINES = {
     AUA: "Austrian", DLH: "Lufthansa", RYR: "Ryanair", WZZ: "Wizz Air", WMT: "Wizz Air",
@@ -1441,6 +1451,17 @@
   function planeTrack(a) {
     return fin(a.track) ? a.track : (fin(a.true_heading) ? a.true_heading : 0);
   }
+  /* dead-reckon a plane's position from its last fix using ground speed + heading */
+  function animLonLat(a, now) {
+    if (!a._gs) return [a._lon0, a._lat0];
+    var dt = (now - a._t0) / 1000 + a._age;
+    if (dt < 0) dt = 0; else if (dt > 30) dt = 30;       /* guard against a stalled fetch */
+    var nm = a._gs * dt / 3600;                          /* knots → nautical miles */
+    var rad = a._trk * Math.PI / 180;                    /* 0 = N, 90 = E */
+    var dLat = Math.cos(rad) * nm / 60;                  /* 1 nm = 1/60° latitude */
+    var dLon = Math.sin(rad) * nm / (60 * Math.cos(a._lat0 * Math.PI / 180));
+    return [a._lon0 + dLon, a._lat0 + dLat];
+  }
 
   function drawFlights() {
     var g = radar.geo;
@@ -1449,15 +1470,18 @@
     c.setTransform(g.dpr, 0, 0, g.dpr, 0, 0);
     c.clearRect(0, 0, g.W, g.H);
     var ink = cssTok("--ink"), lowC = cssTok("--temp");
+    var now = performance.now();
     var vis = flights.planes.filter(function (a) {
       var x = fx(a.lon), y = fy(a.lat);
       return x > -60 && x < g.W + 60 && y > -60 && y < g.H + 60;
     });
+    /* extrapolate each plane along its heading from the last fix (snaps back on the next fetch) */
+    vis.forEach(function (a) { var p = animLonLat(a, now); a._alon = p[0]; a._alat = p[1]; });
     /* paint order: labels first, trails ABOVE the labels, glyphs on top */
     /* build every label, then push overlapping ones downward so they stay readable */
     var labels = [];
     vis.forEach(function (a) {
-      var x = fx(a.lon), y = fy(a.lat);
+      var x = fx(a._alon), y = fy(a._alat);
       var cs = String(a.flight || a.r || a.hex || "").trim();
       var al = airlineOf(cs);                      /* Sentence-Case airline name, or null */
       var name = al || cs;                         /* just the callsign when the airline is unknown */
@@ -1497,6 +1521,7 @@
         pts.push([o.lon + Math.sin(rad) * 3 * k / kmLon, o.lat + Math.cos(rad) * 3 * k / kmLat]);
       }
       h.forEach(function (q) { pts.push([q.lon, q.lat]); });
+      pts.push([a._alon, a._alat]);          /* connect the trail to the animated glyph */
       c.lineCap = "round";
       c.lineWidth = 2.5;
       for (var i = 0; i < pts.length - 1; i++) {
@@ -1515,7 +1540,7 @@
     });
     vis.forEach(function (a) {
       var low = fin(a.alt_baro) && a.alt_baro < 10000;
-      planeGlyph(c, fx(a.lon), fy(a.lat), planeTrack(a), 1.5, low ? lowC : ink);
+      planeGlyph(c, fx(a._alon), fy(a._alat), a._trk, 1.5, low ? lowC : ink);
     });
   }
 
@@ -1532,6 +1557,10 @@
           var h = flights.hist[a.hex] = flights.hist[a.hex] || [];
           h.push({ lon: a.lon, lat: a.lat, trk: planeTrack(a) });
           if (h.length > 60) h.shift();
+          /* base fix for dead-reckoning between fetches */
+          a._t0 = performance.now(); a._lon0 = a.lon; a._lat0 = a.lat;
+          a._trk = planeTrack(a); a._gs = fin(a.gs) ? a.gs : 0;
+          a._age = fin(a.seen_pos) ? a.seen_pos : 0;
         });
         flights.planes = list;
         drawFlights();
@@ -1545,6 +1574,15 @@
     c.clearRect(0, 0, radar.planes.width, radar.planes.height);
   }
   var attribBase = $("mapAttrib").textContent;
+
+  /* smooth motion between the 15 s fetches: repaint just the planes canvas at ~25 fps */
+  function animateFlights(ts) {
+    if (!flights.on || document.hidden) { flights.raf = null; return; }
+    if (ts - flights.last >= 40) { flights.last = ts; drawFlights(); }
+    flights.raf = requestAnimationFrame(animateFlights);
+  }
+  function startFlightAnim() { if (!flights.raf) { flights.last = 0; flights.raf = requestAnimationFrame(animateFlights); } }
+  function stopFlightAnim() { if (flights.raf) { cancelAnimationFrame(flights.raf); flights.raf = null; } }
 
   function setFlights(on) {
     flights.on = on;
@@ -1561,8 +1599,10 @@
       drawRadarFrame();
       fetchFlights();
       flights.timer = setInterval(fetchFlights, FLT_REFRESH);
+      startFlightAnim();
     } else {
       /* stop polling, wipe the planes, bring the rain radar and its loop back */
+      stopFlightAnim();
       clearPlanes();
       drawRadarFrame();
       if (radar.geo && radar.cells) startLoop();
@@ -1570,7 +1610,8 @@
   }
   $("fltBtn").addEventListener("click", function () { setFlights(!flights.on); });
   document.addEventListener("visibilitychange", function () {
-    if (!document.hidden && flights.on) fetchFlights();
+    if (document.hidden) { stopFlightAnim(); return; }
+    if (flights.on) { fetchFlights(); startFlightAnim(); }
   });
   function flightsRedraw() {
     if (!flights.on) return;
