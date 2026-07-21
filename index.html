@@ -1655,19 +1655,36 @@
       }
       h.forEach(function (q) { pts.push([q.lon, q.lat]); });
       pts.push([a._alon, a._alat]);          /* connect the trail to the animated glyph */
-      /* one dot per position report, fading toward the tail — a sequence of fixes
-         rather than a drawn path, so dot spacing also reads as speed */
-      c.fillStyle = color;
-      var n = pts.length, last = Math.max(1, n - 1);
-      for (var i = 0; i < n; i++) {
-        var px = fx(pts[i][0]), py = fy(pts[i][1]);
-        if (px < -20 || px > g.W + 20 || py < -20 || py > g.H + 20) continue;
-        c.globalAlpha = 0.10 + 0.55 * (i / last);
-        c.beginPath();
-        c.arc(px, py, 1.5, 0, Math.PI * 2);
-        c.fill();
+      /* evenly-spaced dotted trail: real fixes are ~15 s (kilometres) apart, so
+         instead of one dot per fix we march the projected path and drop a dot
+         every DOT_GAP px — constant spacing no matter how fast the plane moves */
+      var sp = [];
+      for (var i = 0; i < pts.length; i++) sp.push([fx(pts[i][0]), fy(pts[i][1])]);
+      var total = 0;
+      for (var i = 0; i < sp.length - 1; i++) total += Math.hypot(sp[i + 1][0] - sp[i][0], sp[i + 1][1] - sp[i][1]);
+      if (total > 0) {
+        c.fillStyle = color;
+        var DOT_GAP = 7, carry = 0, travelled = 0;
+        for (var i = 0; i < sp.length - 1; i++) {
+          var ax = sp[i][0], ay = sp[i][1];
+          var dx = sp[i + 1][0] - ax, dy = sp[i + 1][1] - ay, len = Math.hypot(dx, dy);
+          if (len > 0) {
+            var ux = dx / len, uy = dy / len, d = carry;
+            for (; d < len; d += DOT_GAP) {
+              var px = ax + ux * d, py = ay + uy * d;
+              if (px > -20 && px < g.W + 20 && py > -20 && py < g.H + 20) {
+                c.globalAlpha = 0.10 + 0.55 * ((travelled + d) / total);   /* faint tail → bright head */
+                c.beginPath();
+                c.arc(px, py, 1.5, 0, Math.PI * 2);
+                c.fill();
+              }
+            }
+            carry = d - len;                 /* keep the phase across segments so spacing stays even */
+            travelled += len;
+          }
+        }
+        c.globalAlpha = 1;
       }
-      c.globalAlpha = 1;
     });
     vis.forEach(function (a) {
       planeGlyph(c, fx(a._alon), fy(a._alat), a._trk, 1.5, a.alt_baro === "ground" ? gnd : air);
@@ -1793,11 +1810,15 @@
         function (err) {
           vienna(err.code === 1 ? "Location denied. Showing Vienna." : "No location fix. Showing Vienna.");
         },
-        { timeout: 8000, maximumAge: 120000 });
+        /* maximumAge:0 — never reuse an old fix; a cyclist can be kilometres from
+           where the app last saw them, so every launch re-reads the GPS */
+        { timeout: 10000, maximumAge: 0 });
     });
   }
 
+  var lastBoot = 0;
   function boot() {
+    lastBoot = Date.now();
     showNotice("Locating you…", false);
     locate().then(function (pos) {
       showNotice("Loading weather…", false);
@@ -1832,6 +1853,18 @@
     });
   }
   boot();
+
+  /* Reopening the installed PWA usually resumes a suspended page instead of
+     reloading it, so location + weather would stay frozen at wherever you were
+     when you last closed it. Re-boot whenever the app comes back to the
+     foreground (skipping plane mode, which refreshes itself, and rapid
+     app-switch blips). */
+  function refreshOnReturn() {
+    if (document.hidden || flights.on) return;
+    if (Date.now() - lastBoot > 15000) boot();
+  }
+  document.addEventListener("visibilitychange", refreshOnReturn);
+  addEventListener("pageshow", function (e) { if (e.persisted) refreshOnReturn(); });
 
   /* ================= PWA ================= */
   if ("serviceWorker" in navigator) {
