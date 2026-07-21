@@ -524,7 +524,7 @@
     <span class="metrics" id="nowStrip" hidden>
       <span class="temp" id="heroTemp">–</span>
       <span class="wind" id="windNow">
-        <svg id="windNowArrow" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 13 L7 3.4 M3.4 7 L7 2 L10.6 7" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><span id="windNowText"></span>
+        <svg id="windNowArrow" width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 13.2 L7 3.6 M2.7 7.3 L7 2.4 L11.3 7.3" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg><span id="windNowText"></span>
       </span>
       <span class="uvpill" id="uvPill" hidden></span>
     </span>
@@ -1074,7 +1074,7 @@
       if (fin(deg)) {
         s.innerHTML = '<svg width="14" height="14" viewBox="0 0 14 14" style="transform:rotate(' +
           ((deg + 180) % 360) + 'deg)" aria-hidden="true">' +
-          '<path d="M7 13 L7 3.4 M3.4 7 L7 2 L10.6 7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+          '<path d="M7 13.2 L7 3.6 M2.7 7.3 L7 2.4 L11.3 7.3" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
         s.title = Math.round(deg) + "°";
       }
       arrowsEl.appendChild(s);
@@ -1390,21 +1390,40 @@
   function fx(lon) { var g = radar.geo; return (lon2gx(lon, g.z) - g.originX) * g.s; }
   function fy(lat) { var g = radar.geo; return (lat2gy(lat, g.z) - g.originY) * g.s; }
 
+  /* swept-airliner silhouette: domed nose (the control sits at the apex height so
+     both halves meet with a horizontal tangent — no point), steeply swept wings with
+     a concave trailing edge, small tailplanes and a notched tail cone.
+     0.85 keeps it the same visual size as the old glyph at the caller's 1.5 scale. */
   function planeGlyph(c, x, y, trk, s, color) {
     c.save();
     c.translate(x, y);
     c.rotate(trk * Math.PI / 180);
-    c.scale(s, s);
+    c.scale(s * 0.85, s * 0.85);
     c.fillStyle = color;
     c.beginPath();
-    c.moveTo(0, -7);
-    c.bezierCurveTo(1.2, -5, 1.2, -3.5, 1.2, -2);
-    c.lineTo(7, 1.6); c.lineTo(7, 3.4); c.lineTo(1.2, 1.8);
-    c.lineTo(0.9, 4.6); c.lineTo(2.8, 6.2); c.lineTo(2.8, 7.4);
-    c.lineTo(0, 6.6); c.lineTo(-2.8, 7.4); c.lineTo(-2.8, 6.2);
-    c.lineTo(-0.9, 4.6); c.lineTo(-1.2, 1.8); c.lineTo(-7, 3.4); c.lineTo(-7, 1.6);
-    c.lineTo(-1.2, -2);
-    c.bezierCurveTo(-1.2, -3.5, -1.2, -5, 0, -7);
+    c.moveTo(0, -8.2);
+    c.quadraticCurveTo(0.95, -8.2, 1.18, -6.2);      /* domed nose */
+    c.lineTo(1.25, -2);
+    c.quadraticCurveTo(3.4, -0.3, 8, 2.55);          /* swept leading edge */
+    c.quadraticCurveTo(8.5, 3.1, 8, 3.65);           /* wingtip */
+    c.quadraticCurveTo(4.2, 3.5, 1.05, 2.35);        /* concave trailing edge */
+    c.lineTo(0.92, 4.55);
+    c.quadraticCurveTo(1.6, 5.4, 2.85, 6.95);        /* tailplane */
+    c.quadraticCurveTo(3.15, 7.25, 2.8, 7.45);
+    c.quadraticCurveTo(1.5, 7.3, 0.55, 6.95);
+    c.lineTo(0.28, 8.15);
+    c.lineTo(0, 7.95);                               /* tail notch */
+    c.lineTo(-0.28, 8.15);
+    c.lineTo(-0.55, 6.95);
+    c.quadraticCurveTo(-1.5, 7.3, -2.8, 7.45);
+    c.quadraticCurveTo(-3.15, 7.25, -2.85, 6.95);
+    c.quadraticCurveTo(-1.6, 5.4, -0.92, 4.55);
+    c.lineTo(-1.05, 2.35);
+    c.quadraticCurveTo(-4.2, 3.5, -8, 3.65);
+    c.quadraticCurveTo(-8.5, 3.1, -8, 2.55);
+    c.quadraticCurveTo(-3.4, -0.3, -1.25, -2);
+    c.lineTo(-1.18, -6.2);
+    c.quadraticCurveTo(-0.95, -8.2, 0, -8.2);
     c.closePath();
     c.fill();
     c.restore();
