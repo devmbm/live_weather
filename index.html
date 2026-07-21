@@ -1420,20 +1420,39 @@
      airplanes.live carries no route data, so origin/destination is a second lookup.
      Labels never wait on it: the callsign paints immediately and the route fills in
      later. Results are cached in localStorage for good — a flight number's route is
-     stable — and misses are cached too, so a callsign is only ever asked about once. */
+     stable — and misses are cached too, so a callsign is only ever asked about once.
+
+     Caveat: adsbdb maps a *callsign* to its scheduled route, but airlines reuse
+     callsigns across rotations, so the route can be for a different leg than the
+     aircraft is actually flying. Each cached route therefore keeps its endpoint
+     coordinates, and routePlausible() hides any route the plane is nowhere near. */
   var ROUTE_API = "https://api.adsbdb.com/v0/callsign/";
   var ROUTE_BATCH = 3, ROUTE_EVERY = 3000;      /* 3 lookups, then wait 3 s */
+  var ROUTE_MAX_OFF = 150;                       /* km off the direct line before we distrust it */
   var routeCache = {};
-  try { routeCache = JSON.parse(localStorage.getItem("rw-routes")) || {}; } catch (e) {}
+  try { routeCache = JSON.parse(localStorage.getItem("rw-routes2")) || {}; } catch (e) {}
   var routeQueue = [], routeBusy = false;
   function saveRoutes() {
     try {
       var k = Object.keys(routeCache);
       if (k.length > 1500) k.slice(0, k.length - 1000).forEach(function (c) { delete routeCache[c]; });
-      localStorage.setItem("rw-routes", JSON.stringify(routeCache));
+      localStorage.setItem("rw-routes2", JSON.stringify(routeCache));
     } catch (e) {}
   }
-  function routeOf(cs) { return routeCache[cs] || ""; }
+  function routeOf(cs) { return routeCache[cs]; }
+  /* is the aircraft actually near the great-circle line between the route's ends?
+     a plane over Vienna "flying" a Romania→Romania leg is 800 km off — reject it */
+  function routePlausible(rc, lat, lon) {
+    if (!rc || !fin(rc.oLat) || !fin(rc.dLat) || !fin(lat) || !fin(lon)) return true;
+    var lonK = 111.32 * Math.cos(lat * Math.PI / 180), latK = 111.2;
+    var ox = (rc.oLon - lon) * lonK, oy = (rc.oLat - lat) * latK;     /* origin, plane at (0,0) */
+    var dx = (rc.dLon - lon) * lonK, dy = (rc.dLat - lat) * latK;     /* destination */
+    var vx = dx - ox, vy = dy - oy, L2 = vx * vx + vy * vy;
+    if (L2 < 1) return true;
+    var t = -(ox * vx + oy * vy) / L2;                               /* nearest point on the line */
+    var cx = ox + t * vx, cy = oy + t * vy;
+    return Math.hypot(cx, cy) < ROUTE_MAX_OFF;
+  }
   /* on Data Saver or a 2G connection, skip route lookups entirely */
   function thinPipe() {
     var n = navigator.connection;
@@ -1456,10 +1475,11 @@
     var batch = routeQueue.splice(0, ROUTE_BATCH);
     Promise.all(batch.map(function (cs) {
       return fetchJSON(ROUTE_API + encodeURIComponent(cs), 1).then(function (d) {
-        var fr = d && d.response && d.response.flightroute;
-        routeCache[cs] = (fr && fr.origin && fr.destination)
-          ? fr.origin.iata_code + "-" + fr.destination.iata_code : "";
-      }).catch(function () { routeCache[cs] = ""; });
+        var fr = d && d.response && d.response.flightroute, o = fr && fr.origin, ds = fr && fr.destination;
+        routeCache[cs] = (o && ds)
+          ? { r: o.iata_code + "-" + ds.iata_code, oLat: o.latitude, oLon: o.longitude, dLat: ds.latitude, dLon: ds.longitude }
+          : 0;                              /* 0 = looked up, no route (negative cache) */
+      }).catch(function () { routeCache[cs] = 0; });
     })).then(function () {
       routeBusy = false;
       saveRoutes();
@@ -1612,8 +1632,11 @@
       var name = al || cs;                         /* just the callsign when the airline is unknown */
       if (!name) return;
       var lines = [{ txt: name.toUpperCase(), font: LBL_FONT, size: LBL_SIZE }];
-      /* route once it has been looked up, otherwise the callsign — never wait on the network */
-      var sub = routeOf(cs) || (al && cs && al !== cs ? cs : "");
+      /* route once looked up AND the plane is actually near it; otherwise the
+         callsign — never wait on the network, never show a route we don't trust */
+      var rc = routeOf(cs), sub = "";
+      if (rc && rc.r && routePlausible(rc, a.lat, a.lon)) sub = rc.r;
+      else if (al && cs && al !== cs) sub = cs;
       if (sub) lines.push({ txt: sub.toUpperCase(), font: LBL_FONT, size: LBL_SIZE });
       var dim = measureLabel(c, lines);
       /* keep the label on screen: clamp sideways, and flip it above the plane near the bottom */
