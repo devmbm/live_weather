@@ -1655,19 +1655,17 @@
       }
       h.forEach(function (q) { pts.push([q.lon, q.lat]); });
       pts.push([a._alon, a._alat]);          /* connect the trail to the animated glyph */
-      c.lineCap = "round";
-      c.lineWidth = 2.5;
-      for (var i = 0; i < pts.length - 1; i++) {
-        var x1 = fx(pts[i][0]), y1 = fy(pts[i][1]);
-        var x2 = fx(pts[i + 1][0]), y2 = fy(pts[i + 1][1]);
-        if ((x1 < -20 && x2 < -20) || (x1 > g.W + 20 && x2 > g.W + 20) ||
-            (y1 < -20 && y2 < -20) || (y1 > g.H + 20 && y2 > g.H + 20)) continue;
-        c.globalAlpha = 0.06 + 0.5 * (i / pts.length);
-        c.strokeStyle = color;
+      /* one dot per position report, fading toward the tail — a sequence of fixes
+         rather than a drawn path, so dot spacing also reads as speed */
+      c.fillStyle = color;
+      var n = pts.length, last = Math.max(1, n - 1);
+      for (var i = 0; i < n; i++) {
+        var px = fx(pts[i][0]), py = fy(pts[i][1]);
+        if (px < -20 || px > g.W + 20 || py < -20 || py > g.H + 20) continue;
+        c.globalAlpha = 0.10 + 0.55 * (i / last);
         c.beginPath();
-        c.moveTo(x1, y1);
-        c.lineTo(x2, y2);
-        c.stroke();
+        c.arc(px, py, 1.5, 0, Math.PI * 2);
+        c.fill();
       }
       c.globalAlpha = 1;
     });
