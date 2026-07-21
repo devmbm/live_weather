@@ -2,7 +2,14 @@
   "permissions": {
     "allow": [
       "Skill(artifact-design)",
-      "Skill(artifact-design:*)"
+      "Skill(artifact-design:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:bgall.uk)",
+      "WebFetch(domain:api.adsb.lol)",
+      "Bash(curl -s --max-time 20 https://api.adsb.lol/openapi.json)",
+      "Bash(python3 -c ' *)",
+      "Bash(curl -s --max-time 25 -X POST https://api.adsb.lol/api/0/routeset -H 'Content-Type: application/json' -d '{\"planes\":[{\"callsign\":\"AUA451\",\"lat\":48.2,\"lng\":16.4},{\"callsign\":\"RYR7NW\",\"lat\":48.1,\"lng\":16.6}]}')"
     ]
   }
 }

@@ -40,6 +40,9 @@
     --uv-low: #4eb400; --uv-mod: #f7e400; --uv-high: #f85900; --uv-vhigh: #d8001d; --uv-ext: #8a4fc8;
     /* header UV text colours — darker in light mode so the value stays legible on the near-white page */
     --uv-low-ink: #2e7d00; --uv-mod-ink: #a67b00; --uv-high-ink: #d24700; --uv-vhigh-ink: #cc0018; --uv-ext-ink: #6f3fb0;
+    /* radar traffic: one colour for airborne, a paler one for aircraft on the ground */
+    --plane-air: #3a3a38; --plane-gnd: #a8a7a1;
+    --plate: rgba(255,255,255,0.90); --plate-edge: rgba(11,11,11,0.18);
   }
   @media (prefers-color-scheme: dark) {
     :root:where(:not([data-theme="light"])) {
@@ -65,6 +68,9 @@
       --rain-wet-bg: #9ac5ff; --rain-wet-ink: #0e4699;
       --alert: #fbbf24; --alert-ink: #fcd34d;
       --uv-low-ink: #4eb400; --uv-mod-ink: #f7e400; --uv-high-ink: #f85900; --uv-vhigh-ink: #d8001d; --uv-ext-ink: #8a4fc8;
+      /* radar-scope green */
+      --plane-air: #3ee06e; --plane-gnd: #1f7a3c;
+      --plate: rgba(0,0,0,0.72); --plate-edge: transparent;
     }
   }
   :root[data-theme="dark"] {
@@ -90,6 +96,9 @@
     --rain-wet-bg: #9ac5ff; --rain-wet-ink: #0e4699;
     --alert: #fbbf24; --alert-ink: #fcd34d;
     --uv-low-ink: #4eb400; --uv-mod-ink: #f7e400; --uv-high-ink: #f85900; --uv-vhigh-ink: #d8001d; --uv-ext-ink: #8a4fc8;
+    /* radar-scope green */
+    --plane-air: #3ee06e; --plane-gnd: #1f7a3c;
+    --plate: rgba(0,0,0,0.72); --plate-edge: transparent;
   }
 
   * { box-sizing: border-box; }
@@ -401,6 +410,27 @@
       var(--page);
   }
   .radar-frame canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  /* fullscreen plane view — touch-action:none swallows drags so the page behind
+     never scrolls, which also means the scroll position survives the round trip */
+  .radar-frame.full {
+    position: fixed; inset: 0; z-index: 60;
+    border-radius: 0;
+    touch-action: none;
+    overscroll-behavior: none;
+  }
+  .radar-frame.full .ticks { display: none; }
+  /* big, high-contrast target — meant to be hit at speed, one-handed */
+  .exit-planes {
+    position: absolute; left: 14px; right: 14px; z-index: 5;
+    bottom: calc(16px + env(safe-area-inset-bottom));
+    display: flex; align-items: center; justify-content: center; gap: 10px;
+    border: 0; background: var(--plane-air); color: var(--page);
+    font: inherit; font-size: 19px; font-weight: 700; letter-spacing: 0.04em;
+    height: 68px; border-radius: 18px; cursor: pointer;
+    box-shadow: 0 6px 22px rgba(0,0,0,0.45);
+  }
+  .exit-planes[hidden] { display: none; }
+  .exit-planes span { font-size: 22px; line-height: 1; }
   #basemap, #labelmap { display: none; }
   .radar-frame.mapped #basemap,
   .radar-frame.mapped #labelmap { display: block; }
@@ -581,6 +611,7 @@
       <div class="radar-note" id="radarNote">loading radar…</div>
       <div class="scalebar" id="scalebar" hidden><b></b>10 km</div>
       <div class="ticks" id="ticks" role="group" aria-label="Radar time step"></div>
+      <button class="exit-planes" id="exitPlanes" type="button" hidden aria-label="Exit plane view"><span aria-hidden="true">✕</span> EXIT</button>
     </div>
     </div>
     <div class="controls">
@@ -1111,13 +1142,24 @@
   }
 
   function radarGeometry(lat, lon) {
-    /* 1:1 panel at full column width — the page scrolls if it overflows */
-    var outer = radar.frame.parentElement;
-    var side = Math.floor(outer.clientWidth);
-    if (!side) return null;
-    radar.frame.style.width = side + "px";
-    radar.frame.style.height = side + "px";
-    var W = side, H = side;
+    var W, H;
+    if (radar.frame.classList.contains("full")) {
+      /* fullscreen plane view: still 40 km across the width, the height just
+         follows the screen (≈80 km on a tall phone) — the map is never stretched */
+      radar.frame.style.width = radar.frame.style.height = "";
+      W = Math.floor(radar.frame.clientWidth);
+      H = Math.floor(radar.frame.clientHeight);
+    } else {
+      /* 1:1 panel at full column width — the page scrolls if it overflows */
+      var outer = radar.frame.parentElement;
+      var side = Math.floor(outer.clientWidth);
+      W = side; H = side;
+      if (side) {
+        radar.frame.style.width = side + "px";
+        radar.frame.style.height = side + "px";
+      }
+    }
+    if (!W || !H) return null;
     var dpr = Math.min(2, window.devicePixelRatio || 1);
     var mpp = WIN_M / W;                                    /* metres per css px */
     var latRes = 156543.03392 * Math.cos(lat * Math.PI / 180);
@@ -1369,8 +1411,59 @@
 
   /* ================= flights (opt-in: zero requests until the ✈ button) ================= */
   /* flights render straight onto the radar frame; the rain overlay + loop pause while on */
-  var flights = { on: false, timer: null, hist: {}, planes: [], raf: null, last: 0 };
+  var flights = { on: false, timer: null, hist: {}, planes: [], raf: null, last: 0, routeTimer: null };
   var FLT_REFRESH = 15000;
+
+  /* ---- flight routes (adsbdb, keyless + CORS-open) ----
+     airplanes.live carries no route data, so origin/destination is a second lookup.
+     Labels never wait on it: the callsign paints immediately and the route fills in
+     later. Results are cached in localStorage for good — a flight number's route is
+     stable — and misses are cached too, so a callsign is only ever asked about once. */
+  var ROUTE_API = "https://api.adsbdb.com/v0/callsign/";
+  var ROUTE_BATCH = 3, ROUTE_EVERY = 3000;      /* 3 lookups, then wait 3 s */
+  var routeCache = {};
+  try { routeCache = JSON.parse(localStorage.getItem("rw-routes")) || {}; } catch (e) {}
+  var routeQueue = [], routeBusy = false;
+  function saveRoutes() {
+    try {
+      var k = Object.keys(routeCache);
+      if (k.length > 1500) k.slice(0, k.length - 1000).forEach(function (c) { delete routeCache[c]; });
+      localStorage.setItem("rw-routes", JSON.stringify(routeCache));
+    } catch (e) {}
+  }
+  function routeOf(cs) { return routeCache[cs] || ""; }
+  /* on Data Saver or a 2G connection, skip route lookups entirely */
+  function thinPipe() {
+    var n = navigator.connection;
+    return !!(n && (n.saveData || /^(slow-)?2g$/.test(n.effectiveType || "")));
+  }
+  function queueRoutes(list) {
+    if (thinPipe()) return;
+    list.forEach(function (a) {
+      var cs = String(a.flight || "").trim();
+      if (!cs || cs in routeCache || routeQueue.indexOf(cs) >= 0) return;
+      /* only airline callsigns (ABC123…) ever have a route — never spend a request
+         on a registration or a military callsign */
+      if (!/^[A-Z]{3}\d/.test(cs)) { routeCache[cs] = ""; return; }
+      routeQueue.push(cs);
+    });
+  }
+  function pumpRoutes() {
+    if (!flights.on || routeBusy || !routeQueue.length || thinPipe()) return;
+    routeBusy = true;
+    var batch = routeQueue.splice(0, ROUTE_BATCH);
+    Promise.all(batch.map(function (cs) {
+      return fetchJSON(ROUTE_API + encodeURIComponent(cs), 1).then(function (d) {
+        var fr = d && d.response && d.response.flightroute;
+        routeCache[cs] = (fr && fr.origin && fr.destination)
+          ? fr.origin.iata_code + "-" + fr.destination.iata_code : "";
+      }).catch(function () { routeCache[cs] = ""; });
+    })).then(function () {
+      routeBusy = false;
+      saveRoutes();
+      drawFlights();
+    });
+  }
   var AIRLINES = {
     AUA: "Austrian", DLH: "Lufthansa", RYR: "Ryanair", WZZ: "Wizz Air", WMT: "Wizz Air",
     EZY: "easyJet", EJU: "easyJet", BAW: "British Airways", AFR: "Air France", KLM: "KLM",
@@ -1438,6 +1531,8 @@
     c.closePath();
   }
   var LBL_PADY = 3, LBL_GAP = 2;
+  /* one weight, one size, all caps — a flat readout rather than a typographic hierarchy */
+  var LBL_SIZE = 11.5, LBL_FONT = "500 11.5px system-ui, sans-serif";
   /* box size a label will occupy, so it can be de-conflicted before it's drawn */
   function measureLabel(c, lines) {
     var padX = 5, maxW = 0, totalH = 0;
@@ -1450,19 +1545,26 @@
     totalH += LBL_GAP * (lines.length - 1);
     return { w: maxW + padX * 2, h: totalH + LBL_PADY * 2 };
   }
-  /* white text on a black plate, centred on x, stacked from `top` down */
-  function drawLabelAt(c, lines, x, top, boxW) {
-    var bx = x - boxW / 2;
-    c.fillStyle = "rgba(0,0,0,0.82)";
-    roundRect(c, bx, top, boxW, measureLabel(c, lines).h, 3);
+  /* label plate, drawn from its left edge so it can be clamped to the frame.
+     The text takes the radar colour, so the whole overlay reads as one scope. */
+  function drawLabelAt(c, lines, bx, top, boxW, plate, edge, ink) {
+    var h = measureLabel(c, lines).h;
+    c.fillStyle = plate;
+    roundRect(c, bx, top, boxW, h, 3);
     c.fill();
+    if (edge && edge !== "transparent") {
+      c.strokeStyle = edge;
+      c.lineWidth = 1;
+      roundRect(c, bx + 0.5, top + 0.5, boxW - 1, h - 1, 3);
+      c.stroke();
+    }
     c.textAlign = "center";
     c.textBaseline = "top";
-    c.fillStyle = "#fff";
-    var ty = top + LBL_PADY;
+    c.fillStyle = ink;
+    var ty = top + LBL_PADY, cx = bx + boxW / 2;
     lines.forEach(function (l) {
       c.font = l.font;
-      c.fillText(l.txt, x, ty);
+      c.fillText(l.txt, cx, ty);
       ty += l.size + LBL_GAP;
     });
     c.textBaseline = "alphabetic";
@@ -1488,7 +1590,8 @@
     var c = radar.planes.getContext("2d");
     c.setTransform(g.dpr, 0, 0, g.dpr, 0, 0);
     c.clearRect(0, 0, g.W, g.H);
-    var ink = cssTok("--ink"), lowC = cssTok("--temp");
+    var air = cssTok("--plane-air"), gnd = cssTok("--plane-gnd");
+    var plate = cssTok("--plate"), edge = cssTok("--plate-edge");
     var now = performance.now();
     var vis = flights.planes.filter(function (a) {
       var x = fx(a.lon), y = fy(a.lat);
@@ -1505,30 +1608,38 @@
       var al = airlineOf(cs);                      /* Sentence-Case airline name, or null */
       var name = al || cs;                         /* just the callsign when the airline is unknown */
       if (!name) return;
-      var lines = [{ txt: name, font: "700 13px system-ui, sans-serif", size: 13 }];
-      if (al && cs && al !== cs) lines.push({ txt: cs, font: "600 11px system-ui, sans-serif", size: 11 });
+      var lines = [{ txt: name.toUpperCase(), font: LBL_FONT, size: LBL_SIZE }];
+      /* route once it has been looked up, otherwise the callsign — never wait on the network */
+      var sub = routeOf(cs) || (al && cs && al !== cs ? cs : "");
+      if (sub) lines.push({ txt: sub.toUpperCase(), font: LBL_FONT, size: LBL_SIZE });
       var dim = measureLabel(c, lines);
-      labels.push({ x: x, top: y + 12, w: dim.w, h: dim.h, lines: lines });
+      /* keep the label on screen: clamp sideways, and flip it above the plane near the bottom */
+      var bx = x - dim.w / 2, top = y + 12;
+      bx = Math.max(3, Math.min(bx, g.W - dim.w - 3));
+      if (top + dim.h > g.H - 3) top = y - 12 - dim.h;
+      top = Math.max(3, Math.min(top, g.H - dim.h - 3));
+      labels.push({ bx: bx, top: top, w: dim.w, h: dim.h, lines: lines });
     });
     labels.sort(function (p, q) { return p.top - q.top; });   /* place topmost first */
     var placed = [];
     labels.forEach(function (L) {
-      var bx = L.x - L.w / 2, guard = 0, hit;
+      var guard = 0, hit;
       function overlap() {
         for (var i = 0; i < placed.length; i++) {
           var P = placed[i];
-          if (bx < P.x + P.w + 2 && bx + L.w + 2 > P.x &&
+          if (L.bx < P.bx + P.w + 2 && L.bx + L.w + 2 > P.bx &&
               L.top < P.top + P.h + 2 && L.top + L.h + 2 > P.top) return P;
         }
         return null;
       }
       while ((hit = overlap()) && guard++ < 200) L.top = hit.top + hit.h + 2;
-      placed.push({ x: bx, top: L.top, w: L.w, h: L.h });
-      drawLabelAt(c, L.lines, L.x, L.top, L.w);
+      L.top = Math.max(3, Math.min(L.top, g.H - L.h - 3));   /* de-collision must not push it off */
+      placed.push(L);
+      drawLabelAt(c, L.lines, L.bx, L.top, L.w, plate, edge, air);
     });
     vis.forEach(function (a) {
-      var low = fin(a.alt_baro) && a.alt_baro < 10000;
-      var color = low ? lowC : ink;
+      if (a.alt_baro === "ground") return;         /* a parked aircraft's trail is just noise */
+      var color = air;
       var h = flights.hist[a.hex] || [];
       if (!h.length) return;
       /* complete trail: synthetic back-projection from the oldest real point, then real history */
@@ -1558,8 +1669,7 @@
       c.globalAlpha = 1;
     });
     vis.forEach(function (a) {
-      var low = fin(a.alt_baro) && a.alt_baro < 10000;
-      planeGlyph(c, fx(a._alon), fy(a._alat), a._trk, 1.5, low ? lowC : ink);
+      planeGlyph(c, fx(a._alon), fy(a._alat), a._trk, 1.5, a.alt_baro === "ground" ? gnd : air);
     });
   }
 
@@ -1568,9 +1678,12 @@
     var p = radar.pos;
     fetchJSON("https://api.airplanes.live/v2/point/" + p.lat.toFixed(3) + "/" + p.lon.toFixed(3) + "/39", 1)
       .then(function (d) {
+        /* aircraft on the ground are kept — they show as taxiing traffic.
+           the box is trimmed to what the 40 km-wide fullscreen view can actually
+           show (plus margin), so fewer aircraft also means fewer route lookups */
         var list = ((d && d.ac) || []).filter(function (a) {
-          return fin(a.lat) && fin(a.lon) && a.alt_baro !== "ground" &&
-            Math.abs(a.lat - p.lat) < 0.5 && Math.abs(a.lon - p.lon) < 0.75;
+          return fin(a.lat) && fin(a.lon) &&
+            Math.abs(a.lat - p.lat) < 0.45 && Math.abs(a.lon - p.lon) < 0.35;
         }).slice(0, 40);
         list.forEach(function (a) {
           var h = flights.hist[a.hex] = flights.hist[a.hex] || [];
@@ -1582,6 +1695,7 @@
           a._age = fin(a.seen_pos) ? a.seen_pos : 0;
         });
         flights.planes = list;
+        queueRoutes(list);            /* routes trickle in behind the already-painted callsigns */
         drawFlights();
         document.body.setAttribute("data-state-flights", "ok");
       }).catch(function () {});
@@ -1603,8 +1717,24 @@
   function startFlightAnim() { if (!flights.raf) { flights.last = 0; flights.raf = requestAnimationFrame(animateFlights); } }
   function stopFlightAnim() { if (flights.raf) { cancelAnimationFrame(flights.raf); flights.raf = null; } }
 
+  /* plane mode takes over the whole screen; the weather page keeps its scroll
+     position because the overlay never lets a drag reach it */
+  function setPlaneView(on) {
+    var outer = radar.frame.parentElement;
+    /* going fixed takes the frame out of the flow, which would collapse the card and
+       shift the page's scroll — pin the gap open so the layout behind never moves */
+    if (on) outer.style.height = outer.clientHeight + "px";
+    radar.frame.classList.toggle("full", on);
+    $("exitPlanes").hidden = !on;
+    if (on) radar.frame.style.width = radar.frame.style.height = "";
+    else outer.style.height = "";
+    if (radar.pos && !radar.geo) radar.geo = radarGeometry(radar.pos.lat, radar.pos.lon);
+    fullRedraw();
+  }
+
   function setFlights(on) {
     flights.on = on;
+    setPlaneView(on);
     var b = $("fltBtn");
     b.setAttribute("aria-pressed", String(on));
     b.setAttribute("aria-label", on ? "Hide live flights" : "Show live flights");
@@ -1618,16 +1748,21 @@
       drawRadarFrame();
       fetchFlights();
       flights.timer = setInterval(fetchFlights, FLT_REFRESH);
+      flights.routeTimer = setInterval(pumpRoutes, ROUTE_EVERY);
       startFlightAnim();
     } else {
       /* stop polling, wipe the planes, bring the rain radar and its loop back */
       stopFlightAnim();
+      clearInterval(flights.routeTimer);
+      flights.routeTimer = null;
+      routeQueue.length = 0;
       clearPlanes();
       drawRadarFrame();
       if (radar.geo && radar.cells) startLoop();
     }
   }
   $("fltBtn").addEventListener("click", function () { setFlights(!flights.on); });
+  $("exitPlanes").addEventListener("click", function () { setFlights(false); });
   document.addEventListener("visibilitychange", function () {
     if (document.hidden) { stopFlightAnim(); return; }
     if (flights.on) { fetchFlights(); startFlightAnim(); }
