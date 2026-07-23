@@ -339,6 +339,7 @@
   }
   .bar.past { background: var(--rain-past); }
   .bar.zero { height: 2px !important; background: var(--grid); border-radius: 0; }
+  .bar.trace { height: 4px !important; border-radius: 0; opacity: 0.45; }
   .tbars .bar { background: var(--temp); }
   .tbars .bar.past { background: var(--temp-past); }
   .wbars .bar { background: var(--wind); }
@@ -699,6 +700,16 @@
   function hhmm(d) { return pad(d.getHours()) + ":" + pad(d.getMinutes()); }
   function fin(v) { return typeof v === "number" && isFinite(v); }
 
+  /* Index of the step whose 15 minutes contain the wall clock. GeoSphere publishes
+     each run 10–30 min after its valid time, so the newest run's first step is
+     already in the past — anchoring "now" to it put the divider up to half an hour
+     behind and let the status line read stale data as "right now". */
+  function nowIndex(times) {
+    var now = Date.now();
+    for (var i = times.length - 1; i >= 0; i--) if (times[i] <= now) return i;
+    return 0;
+  }
+
   function fetchJSON(url, tries) {
     tries = tries === undefined ? 2 : tries;
     var ctrl = new AbortController();
@@ -727,7 +738,7 @@
   /* ================= charts ================= */
   function clearEl(el) { while (el.firstChild) el.removeChild(el.firstChild); }
 
-  function buildBars(el, values, times, pastN, opts) {
+  function buildBars(el, values, times, nowIdx, opts) {
     clearEl(el);
     var finite = values.filter(fin);
     if (!finite.length) return;
@@ -761,9 +772,14 @@
     values.forEach(function (v, i) {
       var b = document.createElement("div");
       var isZero = !fin(v) || (opts.baselined && v <= 0);
-      b.className = "bar" + (i < pastN ? " past" : "") + (isZero ? " zero" : "");
-      if (!isZero) b.style.height = Math.max(5, (v - lo) / range * 100) + "%";
-      var wantLabel = fin(v) && (
+      /* below the "counts as rain" threshold: still visible, but unmistakably
+         smaller — the 5% floor used to draw 0.02 mm of drizzle at the same height
+         as real rain, so the chart contradicted the status line */
+      var isTrace = !isZero && opts.trace !== undefined && v < opts.trace;
+      b.className = "bar" + (i < nowIdx ? " past" : "") +
+        (isZero ? " zero" : isTrace ? " trace" : "");
+      if (!isZero && !isTrace) b.style.height = Math.max(5, (v - lo) / range * 100) + "%";
+      var wantLabel = fin(v) && !isTrace && (
         (opts.labelMax && v === maxV && (!opts.baselined || v > 0)) ||
         (opts.labelMin && v === minV));
       if (wantLabel && !el.querySelector('[data-lv="' + v + '"]')) {
@@ -785,16 +801,16 @@
     });
     var nowLine = document.createElement("div");
     nowLine.className = "now-line";
-    nowLine.style.left = (pastN / values.length * 100) + "%";
+    nowLine.style.left = (nowIdx / values.length * 100) + "%";
     el.appendChild(nowLine);
   }
 
-  function buildAxis(el, times, pastN) {
+  function buildAxis(el, times, nowIdx) {
     clearEl(el);
     times.forEach(function (t, i) {
-      var isNow = i === pastN;
+      var isNow = i === nowIdx;
       /* hour labels sitting right beside "now" would overlap it */
-      if (isNow || (t.getMinutes() === 0 && Math.abs(i - pastN) > 1 && i > 0 && i < times.length - 1)) {
+      if (isNow || (t.getMinutes() === 0 && Math.abs(i - nowIdx) > 1 && i > 0 && i < times.length - 1)) {
         var s = document.createElement("span");
         s.style.left = ((i + 0.5) / times.length * 100) + "%";
         s.textContent = isNow ? "now" : hhmm(t);
@@ -805,40 +821,43 @@
   }
 
   /* ================= natural-language status ================= */
-  function rainStatement(fut, times, pastN) {
-    var cur = fut[0];
-    var futTimes = times.slice(pastN);
+  /* rr/times are the merged series, nowIdx the step containing the clock — reading
+     "is it raining" off the run's first step reported "Dry for now" during a shower
+     and pushed the countdown to the next one. */
+  function rainStatement(rr, times, nowIdx) {
+    var cur = rr[nowIdx];
     function minsUntil(i) {
-      var m = Math.round((futTimes[i] - Date.now()) / 60000 / 5) * 5;
+      var m = Math.round((times[i] - Date.now()) / 60000 / 5) * 5;
       return Math.max(5, m);
     }
     if (fin(cur) && cur >= WET) {
       var word = cur >= 2 ? "Heavy rain" : cur >= 0.5 ? "Rain" : "Light rain";
       var stop = -1;
-      for (var i = 1; i < fut.length; i++) {
-        if (fin(fut[i]) && fut[i] < WET && (i + 1 >= fut.length || !fin(fut[i + 1]) || fut[i + 1] < WET)) { stop = i; break; }
+      for (var i = nowIdx + 1; i < rr.length; i++) {
+        if (fin(rr[i]) && rr[i] < WET && (i + 1 >= rr.length || !fin(rr[i + 1]) || rr[i + 1] < WET)) { stop = i; break; }
       }
-      return [word + " now.", stop === -1 ? "No break in the next 3 hours." : "Easing around " + hhmm(futTimes[stop]) + "."];
+      return [word + " now.", stop === -1 ? "No break in the next 3 hours." : "Easing around " + hhmm(times[stop]) + "."];
     }
     var start = -1;
-    for (var k = 1; k < fut.length; k++) {
-      if (futTimes[k] - Date.now() < -5 * 60000) continue;   /* already behind us */
-      if (fin(fut[k]) && fut[k] >= WET) { start = k; break; }
+    for (var k = nowIdx + 1; k < rr.length; k++) {
+      if (fin(rr[k]) && rr[k] >= WET) { start = k; break; }
     }
     if (start === -1) return ["Dry for now.", "No rain expected in the next 3 hours."];
-    var kind = fut[start] >= STORM ? "Heavy rain" : fut[start] >= 1 ? "Rain" : "Light rain";
+    var kind = rr[start] >= STORM ? "Heavy rain" : rr[start] >= 1 ? "Rain" : "Light rain";
     var m = minsUntil(start);
-    return ["Dry for now.", kind + (m <= 90 ? " expected in " + m + " min." : " expected around " + hhmm(futTimes[start]) + ".")];
+    return ["Dry for now.", kind + (m <= 90 ? " expected in " + m + " min." : " expected around " + hhmm(times[start]) + ".")];
   }
 
   var COMPASS = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
   function compass(deg) { return COMPASS[Math.round(deg / 22.5) % 16]; }
 
-  /* dry / wet / storm — storm when heavy rain is anywhere in the forecast window */
-  function rainState(fut) {
+  /* dry / wet / storm — storm when heavy rain is anywhere in the forecast window.
+     Counted from now forward, so a shower that has already passed can't keep the
+     status line coloured while the text says the next 3 hours are dry. */
+  function rainState(rr, nowIdx) {
     var peak = -Infinity, wet = false;
-    for (var i = 0; i < fut.length; i++) {
-      if (fin(fut[i])) { if (fut[i] > peak) peak = fut[i]; if (fut[i] >= WET) wet = true; }
+    for (var i = nowIdx; i < rr.length; i++) {
+      if (fin(rr[i])) { if (rr[i] > peak) peak = rr[i]; if (rr[i] >= WET) wet = true; }
     }
     if (peak >= STORM) return "storm";
     return wet ? "wet" : "dry";
@@ -1062,7 +1081,6 @@
       pastIdx.forEach(function (i) { out.push(k5[i]); });
       return out.concat(k0);
     }
-    var pastN = pastIdx.length;
     var times = merge(d5 ? d5.times : [], d0.times);
     var rr = merge(d5 ? d5.rr : [], d0.rr);
     var t2m = merge(d5 ? d5.t2m : [], d0.t2m);
@@ -1075,18 +1093,21 @@
     }
     notice.hidden = true;
 
+    /* everything below reads "now" off the clock, not off the run's first step */
+    var nowIdx = nowIndex(times);
+
     /* top line: temperature + wind (arrow only); UV pill fills in when Open-Meteo answers */
     $("nowStrip").hidden = false;
-    var curT = d0.t2m[0];
+    var curT = t2m[nowIdx];
     $("heroTemp").textContent = fin(curT) ? Math.round(curT) + "°" : "–";
-    var curFF = d0.ff[0], curDD = d0.dd[0];
-    $("windNowText").textContent = fin(curFF) ? Math.round(curFF * 3.6) : "–";
+    var curFF = ffK[nowIdx], curDD = dd[nowIdx];
+    $("windNowText").textContent = fin(curFF) ? Math.round(curFF) : "–";
     $("windNow").hidden = !fin(curFF);
     if (fin(curDD)) $("windNowArrow").style.transform = "rotate(" + ((curDD + 180) % 360) + "deg)";
 
     /* second line: rain outlook, coloured grey (dry) / blue (rain) / amber (storm) */
-    var st = rainStatement(d0.rr, times, pastN);
-    var state = rainState(d0.rr);
+    var st = rainStatement(rr, times, nowIdx);
+    var state = rainState(rr, nowIdx);
     var rl = $("rainStatus");
     rl.hidden = false;
     rl.className = "rain" + (state === "dry" ? "" : " " + state);
@@ -1094,15 +1115,15 @@
 
     /* charts */
     $("rainCard").hidden = $("tempCard").hidden = $("windCard").hidden = false;
-    buildBars($("rainBars"), rr, times, pastN, { baselined: true, unit: "mm", decimals: 1, floor: 2.5, labelMax: true });
-    buildAxis($("rainAxis"), times, pastN);
-    buildBars($("tempBars"), t2m, times, pastN, { baselined: false, unit: "°C", decimals: 0, labelMax: true, labelMin: true });
-    buildAxis($("tempAxis"), times, pastN);
+    buildBars($("rainBars"), rr, times, nowIdx, { baselined: true, unit: "mm", decimals: 1, floor: 2.5, labelMax: true, trace: WET });
+    buildAxis($("rainAxis"), times, nowIdx);
+    buildBars($("tempBars"), t2m, times, nowIdx, { baselined: false, unit: "°C", decimals: 0, labelMax: true, labelMin: true });
+    buildAxis($("tempAxis"), times, nowIdx);
     var arrowsEl = $("windArrows");
     clearEl(arrowsEl);
     dd.forEach(function (deg, i) {
       var s = document.createElement("span");
-      if (i < pastN) s.className = "past";
+      if (i < nowIdx) s.className = "past";
       if (fin(deg)) {
         s.innerHTML = '<svg width="14" height="14" viewBox="0 0 14 14" style="transform:rotate(' +
           ((deg + 180) % 360) + 'deg)" aria-hidden="true">' +
@@ -1111,8 +1132,8 @@
       }
       arrowsEl.appendChild(s);
     });
-    buildBars($("windBars"), ffK, times, pastN, { baselined: true, unit: "km/h", decimals: 0, floor: 20, labelMax: true });
-    buildAxis($("windAxis"), times, pastN);
+    buildBars($("windBars"), ffK, times, nowIdx, { baselined: true, unit: "km/h", decimals: 0, floor: 20, labelMax: true });
+    buildAxis($("windAxis"), times, nowIdx);
 
     $("runInfo").textContent = " · run " + hhmm(d0.ref);
     document.body.setAttribute("data-state", "charts-ok");
