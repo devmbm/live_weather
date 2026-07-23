@@ -7,9 +7,11 @@ line gives a plain-English rain outlook that turns blue for rain and blinking am
 storm. Below are three aligned 15-minute bar charts (rain / temperature / wind with direction
 arrows) covering the recent past and the next 3 hours, an auto-looping rain radar
 (40 km across, 1 km resolution) over a CARTO Voyager base map, and a UV-index graph for the day.
-Tap the place name to search for any location by name instead of using GPS (results outside
-the coverage box are flagged); "Use my location" switches back. The light/dark toggle sits at
-the bottom of the page.
+Tap the place name at the top to re-read the GPS — handy mid-ride, when you have moved since
+the app last looked. To pick a place by hand, scroll to the **Change location** box at the
+bottom of the page: suggestions appear as you type (no need to press enter) and are sized for
+tapping while moving; results outside the coverage box are flagged. The light/dark toggle sits
+just above it.
 
 Data: [GeoSphere Austria](https://www.geosphere.at/) INCA nowcast
 (`nowcast-v1-15min-1km`, CC BY 4.0). Coverage is Austria and its close
@@ -51,7 +53,9 @@ No build step, no API keys, no server.
 - Base map: **© OpenStreetMap contributors © CARTO** — shown on the map panel.
 - Reverse geocoding: [BigDataCloud free client API](https://www.bigdatacloud.com/) (no key).
 - Place search: [Photon](https://photon.komoot.io/) by komoot (no key) — only queried
-  when you search from the location picker, never on page load.
+  while you are typing in the location box, never on page load. One request per 300 ms
+  pause, minimum two characters, and the previous request is aborted when you keep typing,
+  so a whole search costs about one round trip.
 - Live flights (opt-in ✈ button): [airplanes.live](https://airplanes.live/) for aircraft
   positions (no key), one request per 15 s, only while the flights panel is open.
 - UV index: [Open-Meteo](https://open-meteo.com/) (`uv_index`, no key). One small call per

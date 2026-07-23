@@ -225,31 +225,37 @@
     cursor: pointer;
   }
 
+  /* location picker — lives at the bottom of the page, always open. Everything in
+     here is sized for a thumb on the move, not for a stationary index finger. */
   .loc-panel {
     background: var(--surface);
     border: 1px solid var(--ring);
     border-radius: 12px;
-    padding: 10px;
-    box-shadow: 0 6px 20px rgba(0,0,0,0.10);
+    padding: 12px;
   }
-  .loc-panel[hidden] { display: none; }
+  .loc-panel h2 {
+    margin: 0 0 10px;
+    font-size: 13px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--muted);
+  }
   .loc-search {
-    display: flex; align-items: center; gap: 8px;
+    display: flex; align-items: center; gap: 10px;
     background: var(--page);
     border: 1px solid var(--grid);
-    border-radius: 9px;
-    padding: 2px 10px;
+    border-radius: 11px;
+    padding: 2px 12px;
   }
   .loc-search svg { flex: none; color: var(--muted); }
   .loc-search input {
     flex: 1; min-width: 0;
     background: none; border: 0; outline: none;
     font: inherit;
-    font-size: 16px;              /* 16px stops iOS zoom-on-focus */
+    font-size: 17px;              /* ≥16px stops iOS zoom-on-focus */
     color: var(--ink);
-    padding: 9px 0;
+    padding: 14px 0;
   }
   .loc-search input::placeholder { color: var(--muted); }
+  .loc-search:focus-within { border-color: var(--rain); }
   .loc-note {
     display: flex; gap: 6px;
     font-size: 11px; color: var(--muted);
@@ -258,33 +264,39 @@
   }
   .loc-note b { color: var(--ink-2); }
   .loc-results { margin-top: 4px; }
+  .loc-results:empty { display: none; }
   .loc-results .res {
-    display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
-    width: 100%;
+    display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+    width: 100%; min-height: 64px;
     background: none; border: 0; border-top: 1px solid var(--grid);
     font: inherit; color: inherit; text-align: left;
-    padding: 12px 6px;
+    padding: 13px 8px;
     cursor: pointer;
+    justify-content: center;
   }
-  .loc-results .res:focus-visible { outline: 2px solid var(--rain); outline-offset: -2px; border-radius: 6px; }
-  .loc-results .res .n { font-weight: 600; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .loc-results .res .r { flex: none; font-size: 11px; color: var(--muted); }
+  .loc-results .res:active { background: var(--chip-on); }
+  .loc-results .res:focus-visible { outline: 2px solid var(--rain); outline-offset: -2px; border-radius: 8px; }
+  .loc-results .res .n {
+    font-size: 19px; font-weight: 650; line-height: 1.2;
+    max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .loc-results .res .r { font-size: 13px; color: var(--muted); }
   .loc-results .res.off { cursor: default; }
   .loc-results .res.off .n { color: var(--muted); font-weight: 500; }
   .loc-results .res.off .r { color: var(--temp); }
-  .loc-results .msg { border-top: 1px solid var(--grid); padding: 12px 6px; font-size: 13px; color: var(--muted); }
+  .loc-results .msg { border-top: 1px solid var(--grid); padding: 16px 8px; font-size: 14px; color: var(--muted); }
   .loc-myloc {
-    display: flex; align-items: center; gap: 8px;
-    width: 100%;
+    display: flex; align-items: center; gap: 9px;
+    width: 100%; min-height: 56px;
     background: none; border: 0; border-top: 1px solid var(--grid);
-    font: inherit; font-size: 14px; font-weight: 600;
+    font: inherit; font-size: 17px; font-weight: 650;
     color: var(--rain);
-    padding: 12px 6px 6px;
+    padding: 14px 8px;
     margin-top: 2px;
     cursor: pointer;
   }
   .loc-myloc[hidden] { display: none; }
-  .loc-myloc:focus-visible { outline: 2px solid var(--rain); outline-offset: -2px; border-radius: 6px; }
+  .loc-myloc:focus-visible { outline: 2px solid var(--rain); outline-offset: -2px; border-radius: 8px; }
 
   .card {
     background: var(--surface);
@@ -549,7 +561,7 @@
 <body>
 <div class="app" id="app">
   <header>
-    <button class="place" id="placeBtn" type="button" aria-expanded="false" aria-controls="locPanel" title="Change location">
+    <button class="place" id="placeBtn" type="button" title="Update my location">
       <span class="nm" id="placeName">&nbsp;</span><span class="medot" id="placeDot" hidden aria-hidden="true"></span>
     </button>
     <span class="metrics" id="nowStrip" hidden>
@@ -560,21 +572,6 @@
       <span class="uvpill" id="uvPill" hidden></span>
     </span>
   </header>
-
-  <div class="loc-panel" id="locPanel" hidden>
-    <form id="locForm">
-      <div class="loc-search">
-        <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><circle cx="6" cy="6" r="4.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9.2 9.2 L12.6 12.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-        <input id="locInput" type="search" placeholder="Search a place…" autocomplete="off" enterkeyhint="search" aria-label="Search a place">
-      </div>
-    </form>
-    <div class="loc-note"><span aria-hidden="true">ⓘ</span><span>Weather data is <b>GeoSphere Austria</b>. Results only work for Austria and its close surroundings.</span></div>
-    <div class="loc-results" id="locResults"></div>
-    <button class="loc-myloc" id="myLocBtn" type="button" hidden>
-      <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true"><circle cx="7.5" cy="7.5" r="4.4" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="7.5" cy="7.5" r="1.6" fill="currentColor"/><path d="M7.5 0.7 V2.9 M7.5 12.1 V14.3 M0.7 7.5 H2.9 M12.1 7.5 H14.3" stroke="currentColor" stroke-width="1.5"/></svg>
-      Use my location
-    </button>
-  </div>
 
   <div class="notice" id="notice"><span id="noticeText">Locating you…</span><button id="retryBtn" type="button" hidden>Retry</button></div>
 
@@ -637,6 +634,22 @@
   <button class="theme-toggle" id="themeBtn" type="button" aria-label="Switch between light and dark">
     <span aria-hidden="true">◐</span><span id="themeBtnLabel">Dark mode</span>
   </button>
+
+  <section class="loc-panel" id="locPanel" aria-label="Change location">
+    <h2>Change location</h2>
+    <form id="locForm">
+      <div class="loc-search">
+        <svg width="16" height="16" viewBox="0 0 14 14" aria-hidden="true"><circle cx="6" cy="6" r="4.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9.2 9.2 L12.6 12.6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <input id="locInput" type="search" placeholder="Type a place name…" autocomplete="off" enterkeyhint="search" aria-label="Search a place" aria-describedby="locNote">
+      </div>
+    </form>
+    <div class="loc-note" id="locNote"><span aria-hidden="true">ⓘ</span><span>Tap the place name at the top to go back to <b>your GPS location</b>. Weather data is <b>GeoSphere Austria</b> — only Austria and its close surroundings.</span></div>
+    <div class="loc-results" id="locResults" aria-live="polite"></div>
+    <button class="loc-myloc" id="myLocBtn" type="button" hidden>
+      <svg width="17" height="17" viewBox="0 0 15 15" aria-hidden="true"><circle cx="7.5" cy="7.5" r="4.4" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="7.5" cy="7.5" r="1.6" fill="currentColor"/><path d="M7.5 0.7 V2.9 M7.5 12.1 V14.3 M0.7 7.5 H2.9 M12.1 7.5 H14.3" stroke="currentColor" stroke-width="1.5"/></svg>
+      Use my location
+    </button>
+  </section>
 </div>
 <div class="tip" id="tip"></div>
 
@@ -957,11 +970,13 @@
       }).catch(function () {});
   }
 
-  /* ================= location picker (zero requests until the place name is tapped) ================= */
+  /* ================= location picker (zero requests until you type) ================= */
   var GEOSEARCH = "https://photon.komoot.io/api/";
+  var SEARCH_MIN = 2;             /* shorter than this matches half of Austria */
+  var SEARCH_DELAY = 300;         /* ms of quiet typing before a request goes out */
   /* INCA coverage box — Austria and its close surroundings */
   var INCA = { latMin: 45.5, latMax: 49.5, lonMin: 8.1, lonMax: 17.7 };
-  var placeBtn = $("placeBtn"), locPanel = $("locPanel"), locInput = $("locInput"),
+  var placeBtn = $("placeBtn"), locInput = $("locInput"),
       locResults = $("locResults"), myLocBtn = $("myLocBtn");
 
   function inCoverage(lat, lon) {
@@ -975,17 +990,16 @@
     return null;
   }
 
-  function setPanel(open) {
-    locPanel.hidden = !open;
-    placeBtn.setAttribute("aria-expanded", String(open));
-    if (open) {
-      myLocBtn.hidden = !savedLoc();
-      locInput.focus();
-      locInput.select();
-    }
-  }
-  placeBtn.addEventListener("click", function () { setPanel(locPanel.hidden); });
-  locInput.addEventListener("keydown", function (e) { if (e.key === "Escape") setPanel(false); });
+  /* the "Use my location" row only means anything while a searched place is pinned */
+  function syncMyLoc() { myLocBtn.hidden = !savedLoc(); }
+
+  /* Tapping the place name asks the GPS again rather than opening a panel: on a bike
+     you have usually moved since the app last looked, and any pinned search result
+     should get out of the way. Manual search lives at the bottom of the page. */
+  placeBtn.addEventListener("click", function () {
+    clearSearch();
+    setLocation(null);
+  });
 
   function locMsg(txt) {
     clearEl(locResults);
@@ -995,17 +1009,63 @@
     locResults.appendChild(m);
   }
 
-  $("locForm").addEventListener("submit", function (e) {
-    e.preventDefault();
+  var searchTimer = null, searchCtrl = null, lastQ = "";
+
+  function clearSearch() {
+    clearTimeout(searchTimer);
+    if (searchCtrl) { searchCtrl.abort(); searchCtrl = null; }
+    lastQ = "";
+    locInput.value = "";
+    clearEl(locResults);
+  }
+
+  /* suggest while typing: one request per pause, and the previous one is aborted so
+     a fast typist still costs a single round trip */
+  function scheduleSearch() {
     var q = locInput.value.trim();
-    if (!q) return;
-    locInput.blur();                       /* drop the keyboard so results are visible */
+    clearTimeout(searchTimer);
+    if (searchCtrl) { searchCtrl.abort(); searchCtrl = null; }
+    if (q.length < SEARCH_MIN) { lastQ = ""; clearEl(locResults); return; }
+    searchTimer = setTimeout(function () { runSearch(q); }, SEARCH_DELAY);
+  }
+
+  function runSearch(q) {
+    if (q === lastQ) return;
+    lastQ = q;
     locMsg("Searching…");
     var bias = radar.pos || { lat: 47.6, lon: 14.3 };   /* centre of Austria */
-    fetchJSON(GEOSEARCH + "?q=" + encodeURIComponent(q) + "&limit=6&lang=en" +
-      "&lat=" + bias.lat.toFixed(3) + "&lon=" + bias.lon.toFixed(3), 1)
-      .then(showLocResults)
-      .catch(function () { locMsg("Search failed. Check your connection and try again."); });
+    var ctrl = new AbortController();
+    searchCtrl = ctrl;
+    var timer = setTimeout(function () { ctrl.abort(); }, 12000);
+    fetch(GEOSEARCH + "?q=" + encodeURIComponent(q) + "&limit=6&lang=en" +
+      "&lat=" + bias.lat.toFixed(3) + "&lon=" + bias.lon.toFixed(3), { signal: ctrl.signal })
+      .then(function (r) {
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        return r.json();
+      })
+      .then(function (d) { if (searchCtrl === ctrl) showLocResults(d); })
+      .catch(function (e) {
+        if (e && e.name === "AbortError") return;      /* superseded by a newer keystroke */
+        if (searchCtrl === ctrl) { lastQ = ""; locMsg("Search failed. Check your connection and try again."); }
+      })
+      .finally(function () {
+        clearTimeout(timer);
+        if (searchCtrl === ctrl) searchCtrl = null;
+      });
+  }
+
+  locInput.addEventListener("input", scheduleSearch);
+  locInput.addEventListener("keydown", function (e) { if (e.key === "Escape") clearSearch(); });
+
+  /* Enter is no longer required, but still skips the debounce and drops the keyboard */
+  $("locForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    clearTimeout(searchTimer);
+    var q = locInput.value.trim();
+    if (q.length < SEARCH_MIN) return;
+    locInput.blur();
+    lastQ = "";
+    runSearch(q);
   });
 
   function showLocResults(d) {
@@ -1041,7 +1101,6 @@
       });
       locResults.appendChild(row);
     });
-    myLocBtn.hidden = false;
   }
 
   function setLocation(loc) {
@@ -1049,10 +1108,12 @@
       if (loc) localStorage.setItem("rw-loc", JSON.stringify(loc));
       else localStorage.removeItem("rw-loc");
     } catch (e) {}
-    setPanel(false);
-    locInput.value = "";
-    clearEl(locResults);
+    clearSearch();
+    syncMyLoc();
     if (flights.on) setFlights(false);
+    /* picking from the bottom of the page leaves you looking at the picker, not the
+       weather it just changed */
+    if (loc) scrollTo({ top: 0, behavior: "smooth" });
     boot();
   }
   myLocBtn.addEventListener("click", function () { setLocation(null); });
@@ -1863,6 +1924,7 @@
   var lastBoot = 0;
   function boot() {
     lastBoot = Date.now();
+    syncMyLoc();
     showNotice("Locating you…", false);
     locate().then(function (pos) {
       showNotice("Loading weather…", false);
